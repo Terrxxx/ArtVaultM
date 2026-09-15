@@ -211,49 +211,57 @@ export default function ProjectList() {
           <Spin size="large" />
         </div>
       ) : (
-        <Space direction="vertical" size={28} style={{ width: '100%' }}>
-          <div>
-            {mine.length === 0 ? (
-              <Empty
-                description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
-                style={{ marginTop: 24, marginBottom: 24 }}
-              />
-            ) : (
-              <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
-            )}
-          </div>
-
-          {plaza.length > 0 && (
-            <div>
-              <Typography.Title level={5} style={{ marginBottom: 12 }}>
-                广场
-                <Typography.Text
-                  type="secondary"
-                  style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
-                >
-                  按热度推荐公开项目
+        <Row gutter={[20, 20]}>
+          {/* 左：活跃排行（竖柱） */}
+          <Col xs={24} lg={7} xxl={6}>
+            <Card
+              title="活跃排行"
+              extra={
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  按上传版本数
                 </Typography.Text>
-              </Typography.Title>
-              <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
-            </div>
-          )}
+              }
+            >
+              <Leaderboard
+                items={rankItems}
+                days={rankDays}
+                onDaysChange={setRankDays}
+                loading={rankLoading}
+              />
+            </Card>
+          </Col>
 
-          <Card
-            title="活跃排行"
-            extra={
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                按上传版本数
-              </Typography.Text>
-            }
-          >
-            <Leaderboard
-              items={rankItems}
-              days={rankDays}
-              onDaysChange={setRankDays}
-              loading={rankLoading}
-            />
-          </Card>
-        </Space>
+          {/* 右：我的项目 + 广场 */}
+          <Col xs={24} lg={17} xxl={18}>
+            <Space direction="vertical" size={28} style={{ width: '100%' }}>
+              <div>
+                {mine.length === 0 ? (
+                  <Empty
+                    description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
+                    style={{ marginTop: 24, marginBottom: 24 }}
+                  />
+                ) : (
+                  <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
+                )}
+              </div>
+
+              {plaza.length > 0 && (
+                <div>
+                  <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                    广场
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
+                    >
+                      按热度推荐公开项目
+                    </Typography.Text>
+                  </Typography.Title>
+                  <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
+                </div>
+              )}
+            </Space>
+          </Col>
+        </Row>
       )}
 
       <Modal

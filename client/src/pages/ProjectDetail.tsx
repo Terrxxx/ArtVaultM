@@ -200,38 +200,46 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           )}
         </Space>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <Spin />
-          </div>
-        ) : assets.length === 0 ? (
-          <Empty description={q ? '没有匹配的资产' : '暂无资产'} style={{ marginTop: 60 }} />
-        ) : (
-          <Row gutter={[16, 16]}>
-            {assets.map((a) => (
-              <Col xs={24} sm={12} lg={6} key={a.id}>
-                <AssetCard asset={a} />
-              </Col>
-            ))}
-          </Row>
-        )}
+        <Row gutter={[20, 20]}>
+          {/* 左：项目贡献排行（竖柱） */}
+          <Col xs={24} lg={7} xxl={6}>
+            <Card
+              title="贡献排行"
+              extra={
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  按上传版本数
+                </Typography.Text>
+              }
+            >
+              <Leaderboard
+                items={rankItems}
+                days={rankDays}
+                onDaysChange={setRankDays}
+                loading={rankLoading}
+                emptyText="这段时间还没有贡献"
+              />
+            </Card>
+          </Col>
 
-        <Card
-          title="贡献排行"
-          extra={
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              按上传版本数
-            </Typography.Text>
-          }
-        >
-          <Leaderboard
-            items={rankItems}
-            days={rankDays}
-            onDaysChange={setRankDays}
-            loading={rankLoading}
-            emptyText="这段时间还没有贡献"
-          />
-        </Card>
+          {/* 右：资产列表 */}
+          <Col xs={24} lg={17} xxl={18}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 60 }}>
+                <Spin />
+              </div>
+            ) : assets.length === 0 ? (
+              <Empty description={q ? '没有匹配的资产' : '暂无资产'} style={{ marginTop: 60 }} />
+            ) : (
+              <Row gutter={[16, 16]}>
+                {assets.map((a) => (
+                  <Col xs={24} sm={12} xl={8} key={a.id}>
+                    <AssetCard asset={a} />
+                  </Col>
+                ))}
+              </Row>
+            )}
+          </Col>
+        </Row>
 
         <Card title="更新热力图">
           <Heatmap
