@@ -126,6 +126,7 @@ class AssetVersion(Base):
     file_format = Column(String, nullable=True)
     file_hash = Column(String, nullable=True, index=True)
     thumbnail = Column(String, nullable=True)
+    storage = Column(String, default="local")  # local=本地磁盘 / cos=腾讯云COS
     changelog = Column(String, nullable=True)
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_latest = Column(Boolean, default=True)
@@ -228,3 +229,19 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     actor = relationship("User", foreign_keys=[actor_id])
+
+
+class StorageConfig(Base):
+    """对象存储配置（全局单行）。由高级管理员在管理后台维护。"""
+
+    __tablename__ = "storage_config"
+
+    id = Column(Integer, primary_key=True)
+    provider = Column(String, default="local")  # local / cos
+    cos_secret_id = Column(String, nullable=True)
+    cos_secret_key = Column(String, nullable=True)
+    cos_region = Column(String, nullable=True)
+    cos_bucket = Column(String, nullable=True)
+    cos_app_id = Column(String, nullable=True)
+    cos_prefix = Column(String, default="artvaultm")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

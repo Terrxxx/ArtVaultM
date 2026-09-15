@@ -43,6 +43,8 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           {/* 项目规范地址：/用户名/项目slug（中文已转拼音） */}
           <Route path="/:username/:slug" element={<ProjectDetailBySlug />} />
+          {/* 资产规范地址：/用户名/项目slug/资产id */}
+          <Route path="/:username/:slug/:id" element={<AssetDetail />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

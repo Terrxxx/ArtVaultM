@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Asset, AssetRelation, AssetVersion, Category, User
 from ..serializers import asset_to_dict
-from ..services import notify, storage
-from .deps import ensure_project_access, get_current_user
+from ..services import notify, storage, storage_config
+from .deps import can_edit_asset, ensure_project_access, get_current_user
 
 router = APIRouter()
 
@@ -18,20 +18,32 @@ def _parse_tags(raw: Optional[str]) -> List[str]:
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
-def _find_reusable_version(db: Session, project_id: int, file_hash: str) -> Optional[AssetVersion]:
-    """同一项目内查找相同哈希的已有文件，用于去重（仅当物理文件仍存在）。"""
-    candidate = (
+def _target_storage(cos: Optional[dict]) -> str:
+    return "cos" if cos else "local"
+
+
+def _find_reusable_version(
+    db: Session,
+    project_id: int,
+    file_hash: str,
+    target_storage: str,
+    cos: Optional[dict],
+) -> Optional[AssetVersion]:
+    """同项目内查找相同哈希、且存储位置一致、文件仍在的版本，用于去重。"""
+    candidates = (
         db.query(AssetVersion)
-        .join(Asset, Asset.project_id == project_id)
-        .filter(AssetVersion.file_hash == file_hash)
-        .filter(Asset.project_id == project_id)
-        .first()
+        .join(Asset, Asset.id == AssetVersion.asset_id)
+        .filter(
+            Asset.project_id == project_id,
+            AssetVersion.file_hash == file_hash,
+            AssetVersion.storage == target_storage,
+        )
+        .all()
     )
-    if candidate is None:
-        return None
-    if not storage.resolve_path(candidate.file_path).exists():
-        return None
-    return candidate
+    for candidate in candidates:
+        if storage.file_exists(candidate.file_path, candidate.storage, cos):
+            return candidate
+    return None
 
 
 @router.get("/projects/{project_id}/assets")
@@ -115,16 +127,18 @@ def create_asset(
     db.add(asset)
     db.flush()
 
-    # 暂存上传内容并计算哈希，命中已有文件则复用（去重）
+    cos = storage_config.cos_params(db)
     staged = storage.stage_upload(file)
-    reuse = _find_reusable_version(db, project_id, staged["file_hash"])
+    reuse = _find_reusable_version(
+        db, project_id, staged["file_hash"], _target_storage(cos), cos
+    )
     if reuse is not None:
         storage.discard_staged(staged["tmp_path"])
-        file_path = reuse.file_path
+        placed = {"file_path": reuse.file_path, "storage": reuse.storage}
         deduped = True
     else:
-        file_path = storage.place_upload(
-            staged["tmp_path"], project_id, asset.id, 1, staged["file_name"]
+        placed = storage.place_upload(
+            staged["tmp_path"], project_id, asset.id, 1, staged["file_name"], cos
         )
         deduped = False
 
@@ -137,7 +151,8 @@ def create_asset(
             is_latest=True,
             changelog=changelog,
             thumbnail=thumb,
-            file_path=file_path,
+            storage=placed["storage"],
+            file_path=placed["file_path"],
             file_name=staged["file_name"],
             file_size=staged["file_size"],
             file_format=staged["file_format"],
@@ -147,7 +162,6 @@ def create_asset(
     )
     asset.cover_thumbnail = thumb
 
-    # 通知订阅了该项目的用户
     notify.notify_subscribers(
         db,
         "project",
@@ -192,7 +206,10 @@ def update_asset(
     asset = db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
-    ensure_project_access(db, asset.project_id, user, write=True)
+    if not can_edit_asset(asset, user):
+        raise HTTPException(
+            status_code=403, detail="仅资产创建者或高级管理员可编辑该资产"
+        )
 
     if name is not None:
         asset.name = name
@@ -231,12 +248,13 @@ def delete_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
 
-    is_owner_or_admin = user.role == "admin" or asset.created_by == user.id
-    if not is_owner_or_admin:
-        # 其余情况需项目写权限（所有者/管理员/成员）
-        ensure_project_access(db, asset.project_id, user, write=True)
+    if not can_edit_asset(asset, user):
+        raise HTTPException(
+            status_code=403, detail="仅资产创建者或高级管理员可删除该资产"
+        )
 
     project_id = asset.project_id
+    cos = storage_config.cos_params(db)
 
     # 清理关联关系、缩略图与实体文件
     db.query(AssetRelation).filter(
@@ -245,7 +263,9 @@ def delete_asset(
     ).delete(synchronize_session=False)
 
     for v in asset.versions:
-        storage.delete_file(v.thumbnail)
+        storage.delete_file(v.thumbnail)  # 缩略图始终在本地
+        if v.storage == "cos":
+            storage.delete_file(v.file_path, "cos", cos)
     storage.delete_file(asset.cover_thumbnail)
     storage.delete_asset_dir(project_id, asset_id)
 

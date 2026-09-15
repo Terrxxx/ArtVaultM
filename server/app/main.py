@@ -43,6 +43,7 @@ WANTED_COLUMNS = {
     "asset_versions": {
         "file_hash": "VARCHAR",
         "thumbnail": "VARCHAR",
+        "storage": "VARCHAR DEFAULT 'local'",
     },
     "comments": {
         "version_id": "INTEGER REFERENCES asset_versions(id)",
@@ -104,17 +105,24 @@ def backfill_slugs() -> None:
 
 
 def seed_admin() -> None:
+    """默认 admin 账号即为高级管理员。"""
     db: Session = SessionLocal()
     try:
-        if db.query(User).filter(User.role == "admin").first() is None:
-            db.add(
-                User(
-                    username="admin",
-                    password_hash=hash_password("admin123"),
-                    nickname="管理员",
-                    role="admin",
+        admin = db.query(User).filter(User.username == "admin").first()
+        if admin is None:
+            if db.query(User).filter(User.role == "super_admin").first() is None:
+                db.add(
+                    User(
+                        username="admin",
+                        password_hash=hash_password("admin123"),
+                        nickname="管理员",
+                        role="super_admin",
+                    )
                 )
-            )
+                db.commit()
+        elif admin.role == "admin":
+            # 早期版本的 admin 是普通管理员，迁移为高级管理员
+            admin.role = "super_admin"
             db.commit()
     finally:
         db.close()

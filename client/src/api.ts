@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from './store'
 import type {
+  AdminProject,
   Asset,
   AssetRelation,
   Category,
@@ -10,6 +11,7 @@ import type {
   Notification,
   Project,
   ProjectMember,
+  StorageConfig,
   User,
   UserBrief,
   UserProfile,
@@ -46,10 +48,8 @@ export const api = {
     client.post('/auth/change-password', { old_password, new_password }).then((r) => r.data),
 
   // ---------- 项目 ----------
-  listProjects: (archived = false, scope: 'mine' | 'public' = 'mine') =>
-    client.get<Project[]>('/projects', { params: { archived, scope } }).then((r) => r.data),
-  randomPublicProjects: (limit = 8) =>
-    client.get<Project[]>('/projects/public/random', { params: { limit } }).then((r) => r.data),
+  listProjects: (archived = false) =>
+    client.get<Project[]>('/projects', { params: { archived } }).then((r) => r.data),
   getProject: (id: number) => client.get<Project>(`/projects/${id}`).then((r) => r.data),
   getProjectBySlug: (username: string, slug: string) =>
     client.get<Project>(`/projects/by-slug/${username}/${slug}`).then((r) => r.data),
@@ -115,6 +115,11 @@ export const api = {
     client.delete(`/versions/${versionId}`).then((r) => r.data),
   downloadStats: (assetId: number) =>
     client.get<DownloadStats>(`/assets/${assetId}/download-stats`).then((r) => r.data),
+  /** 预览用：换取某个版本的短期流式地址 */
+  streamToken: (versionId: number) =>
+    client
+      .get<{ token: string; url: string; expires_in: number }>(`/versions/${versionId}/stream-token`)
+      .then((r) => r.data),
 
   // ---------- 点赞 ----------
   toggleLike: (assetId: number) =>
@@ -168,7 +173,15 @@ export const api = {
   setUserStatus: (id: number, status: string) =>
     client.patch<User>(`/admin/users/${id}/status`, { status }).then((r) => r.data),
   listAllProjects: (archived = false) =>
-    client.get<Project[]>('/admin/projects', { params: { archived } }).then((r) => r.data),
+    client.get<AdminProject[]>('/admin/projects', { params: { archived } }).then((r) => r.data),
+
+  // ---------- 对象存储配置（仅高级管理员） ----------
+  getStorageConfig: () =>
+    client.get<StorageConfig>('/admin/storage-config').then((r) => r.data),
+  updateStorageConfig: (data: Partial<StorageConfig> & { cos_secret_key?: string }) =>
+    client.put<StorageConfig>('/admin/storage-config', data).then((r) => r.data),
+  testStorageConfig: () =>
+    client.post<{ ok: boolean; message: string }>('/admin/storage-config/test').then((r) => r.data),
 }
 
 // 把后端返回的相对路径（如 thumbnails/x.png）转成可访问 URL
@@ -188,6 +201,19 @@ export function projectPath(p: {
 }): string {
   if (p.owner?.username && p.slug) return `/${p.owner.username}/${p.slug}`
   return `/projects/${p.id}`
+}
+
+/** 资产的规范路径：/用户名/项目slug/资产id */
+export function assetPath(a: {
+  id: number
+  project_id: number
+  project_slug?: string | null
+  project_owner?: UserBrief | null
+}): string {
+  if (a.project_owner?.username && a.project_slug) {
+    return `/${a.project_owner.username}/${a.project_slug}/${a.id}`
+  }
+  return `/assets/${a.id}`
 }
 
 export function downloadUrl(versionId: number): string {

@@ -1,4 +1,3 @@
-import random
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +10,7 @@ from ..serializers import project_to_dict
 from ..services.slug import slugify
 from .deps import (
     ensure_project_access,
-    ensure_project_owner,
+    ensure_project_editor,
     get_current_user,
     visible_project_ids,
 )
@@ -88,50 +87,24 @@ def create_project(
 @router.get("/projects")
 def list_projects(
     archived: bool = False,
-    scope: str = "mine",  # mine=我参与的 / public=全部公开
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = db.query(Project).filter(Project.is_archived.is_(bool(archived)))
+    """「我的项目」：只包含自己创建或受邀加入的项目（所有角色都一样）。
 
-    if scope == "public":
-        query = query.filter(Project.visibility == "public")
-        projects = query.all()
-        random.shuffle(projects)
-        return [project_to_dict(p) for p in projects]
-
-    if user.role != "admin":
-        joined_ids = [
-            m.project_id
-            for m in db.query(ProjectMember)
-            .filter(
-                ProjectMember.user_id == user.id,
-                ProjectMember.status == "accepted",
-            )
-            .all()
-        ]
-        query = query.filter(
-            (Project.owner_id == user.id) | (Project.id.in_(joined_ids or [0]))
-        )
-
-    projects = query.order_by(Project.created_at.desc()).all()
-    return [project_to_dict(p) for p in projects]
-
-
-@router.get("/projects/public/random")
-def random_public_projects(
-    limit: int = 8,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """主页「发现公开项目」：随机返回公开项目。"""
+    全量项目（含他人私有项目）只在管理后台的 /admin/projects 提供。
+    """
+    allowed = visible_project_ids(db, user) or []
     projects = (
         db.query(Project)
-        .filter(Project.visibility == "public", Project.is_archived.is_(False))
+        .filter(
+            Project.is_archived.is_(bool(archived)),
+            Project.id.in_(allowed or [0]),
+        )
+        .order_by(Project.created_at.desc())
         .all()
     )
-    random.shuffle(projects)
-    return [project_to_dict(p) for p in projects[: max(1, min(limit, 50))]]
+    return [project_to_dict(p) for p in projects]
 
 
 @router.get("/projects/by-slug/{username}/{slug}")
@@ -172,7 +145,7 @@ def update_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    project = ensure_project_owner(db, project_id, user)
+    project = ensure_project_editor(db, project_id, user)
 
     for field in ("name", "description", "github_repo_url", "visibility"):
         value = getattr(payload, field)
@@ -194,7 +167,7 @@ def delete_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    project = ensure_project_owner(db, project_id, user)
+    project = ensure_project_editor(db, project_id, user)
     db.delete(project)
     db.commit()
     return {"ok": True}

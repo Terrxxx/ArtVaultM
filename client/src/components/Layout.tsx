@@ -3,14 +3,32 @@ import { Avatar, Badge, Dropdown, Layout as AntLayout, Space } from 'antd'
 import { BellOutlined, DatabaseOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { api, uploadUrl } from '../api'
+import { isAdminLike } from '../types'
 import { useAuthStore } from '../store'
 
 export default function Layout() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const setUser = useAuthStore((s) => s.setUser)
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = isAdminLike(user?.role)
+
+  // 登录态是持久化的，角色/昵称可能已被管理员改动，进入应用时拉一次最新资料
+  useEffect(() => {
+    let alive = true
+    api
+      .me()
+      .then((fresh) => {
+        if (alive) setUser(fresh)
+      })
+      .catch(() => {
+        /* 401 已由拦截器处理 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [setUser])
 
   useEffect(() => {
     let alive = true

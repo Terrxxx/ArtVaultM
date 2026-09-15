@@ -19,8 +19,9 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, thumbUrl } from '../api'
+import { api, assetPath, thumbUrl } from '../api'
 import type { Asset, AssetRelation, Category } from '../types'
+import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
@@ -31,7 +32,6 @@ export default function AssetEdit() {
   const [asset, setAsset] = useState<Asset | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [relations, setRelations] = useState<AssetRelation[]>([])
-  const [siblings, setSiblings] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -50,14 +50,12 @@ export default function AssetEdit() {
         tags: a.tags?.join(',') ?? '',
         category_id: a.category_id,
       })
-      const [cats, rels, sib] = await Promise.all([
+      const [cats, rels] = await Promise.all([
         api.listCategories(a.project_id),
         api.listRelations(assetId),
-        api.listAssets(a.project_id),
       ])
       setCategories(cats)
       setRelations(rels)
-      setSiblings(sib.filter((x) => x.id !== assetId))
       setError(null)
     } catch (e: any) {
       setError(e.response?.data?.detail || '资产不存在')
@@ -79,7 +77,8 @@ export default function AssetEdit() {
   }
   if (error || !asset) return <Result status="404" title={error || '资产不存在'} />
 
-  const canEdit = me?.role === 'admin' || asset.created_by === me?.id
+  // 编辑资产：仅上传者本人或高级管理员
+  const canEdit = asset.created_by === me?.id || isSuperAdmin(me?.role)
 
   const onSave = async (values: any) => {
     const fd = new FormData()
@@ -111,26 +110,6 @@ export default function AssetEdit() {
       navigate(`/projects/${asset.project_id}`)
     } catch (e: any) {
       message.error(e.response?.data?.detail || '删除失败')
-    }
-  }
-
-  const addRelation = async (toId: number) => {
-    try {
-      await api.addRelation(assetId, toId)
-      message.success('已建立关联')
-      load()
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '关联失败')
-    }
-  }
-
-  const removeRelation = async (relId: number) => {
-    try {
-      await api.deleteRelation(relId)
-      message.success('已解除关联')
-      load()
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '解除失败')
     }
   }
 
@@ -214,40 +193,19 @@ export default function AssetEdit() {
             label: `资产关联 (${relations.length})`,
             children: (
               <Card>
-                {canEdit && siblings.length > 0 && (
-                  <Select
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="关联到本项目其他资产（如动画→模型）"
-                    style={{ width: '100%', marginBottom: 16 }}
-                    value={null}
-                    options={siblings.map((s) => ({ value: s.id, label: s.name }))}
-                    onSelect={(v: number | null) => {
-                      if (v != null) addRelation(v)
-                    }}
-                  />
-                )}
+                {/* 资产关联为只读展示，不在此处增删 */}
                 <List
                   dataSource={relations}
                   locale={{ emptyText: <Empty description="暂无关联" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
                   renderItem={(r) => (
-                    <List.Item
-                      actions={
-                        canEdit
-                          ? [
-                              <Popconfirm key="rm" title="解除关联？" onConfirm={() => removeRelation(r.id)}>
-                                <Button type="link" danger size="small">
-                                  解除
-                                </Button>
-                              </Popconfirm>,
-                            ]
-                          : []
-                      }
-                    >
-                      <Link to={`/assets/${r.asset.id}`}>
-                        {r.direction === 'in' ? '← ' : '→ '}
-                        {r.asset.name}
-                      </Link>
+                    <List.Item>
+                      <Space>
+                        <Link to={assetPath(r.asset)}>
+                          {r.direction === 'in' ? '← ' : '→ '}
+                          {r.asset.name}
+                        </Link>
+                        {r.asset.category_name && <Tag color="geekblue">{r.asset.category_name}</Tag>}
+                      </Space>
                     </List.Item>
                   )}
                 />

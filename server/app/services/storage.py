@@ -8,8 +8,12 @@ from typing import Optional
 from fastapi import UploadFile
 
 from ..config import settings
+from . import storage_config
 
 CHUNK = 1024 * 1024
+
+# 说明：缩略图与头像始终保存在本地（前端用 <img> 直读 /uploads，无需每次签名）；
+# 仅「资产文件本体」会按配置上传到 COS。
 
 
 def _safe_name(filename: str) -> str:
@@ -49,17 +53,34 @@ def stage_upload(file: UploadFile) -> dict:
 
 
 def place_upload(
-    tmp_path: Path, project_id: int, asset_id: int, version: int, safe_name: str
-) -> str:
-    """把暂存文件移动到资产版本目录，返回相对路径（正斜杠）。"""
+    tmp_path: Path,
+    project_id: int,
+    asset_id: int,
+    version: int,
+    safe_name: str,
+    cos: Optional[dict] = None,
+) -> dict:
+    """把暂存文件放到最终位置（COS 或本地），返回 {file_path, storage}。"""
     rel_dir = Path("projects") / str(project_id) / "assets" / str(asset_id) / f"v{version}"
+    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+
+    if cos:
+        object_key = f"{cos['prefix']}/{rel_dir.as_posix()}/{stored_name}"
+        client = storage_config.build_client(cos)
+        client.upload_file(
+            Bucket=cos["bucket"],
+            Key=object_key,
+            LocalFilePath=str(tmp_path),
+            EnableMD5=False,
+        )
+        tmp_path.unlink(missing_ok=True)
+        return {"file_path": object_key, "storage": "cos"}
+
     out_dir = Path(settings.upload_dir) / rel_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
     out_path = out_dir / stored_name
     shutil.move(str(tmp_path), str(out_path))
-    return (rel_dir / stored_name).as_posix()
+    return {"file_path": (rel_dir / stored_name).as_posix(), "storage": "local"}
 
 
 def discard_staged(tmp_path: Path) -> None:
@@ -71,7 +92,7 @@ def discard_staged(tmp_path: Path) -> None:
 
 
 def save_version_thumbnail(asset_id: int, version: int, file: UploadFile) -> Optional[str]:
-    """保存某个版本的缩略图，返回相对路径。"""
+    """保存某个版本的缩略图（始终存本地），返回相对路径。"""
     if file is None or not file.filename:
         return None
     rel_dir = Path("thumbnails")
@@ -90,7 +111,7 @@ def save_version_thumbnail(asset_id: int, version: int, file: UploadFile) -> Opt
 
 
 def save_avatar(user_id: int, file: UploadFile) -> Optional[str]:
-    """保存用户头像，返回相对路径。"""
+    """保存用户头像（始终存本地），返回相对路径。"""
     if file is None or not file.filename:
         return None
     rel_dir = Path("avatars")
@@ -112,9 +133,34 @@ def resolve_path(rel_path: str) -> Path:
     return Path(settings.upload_dir) / rel_path
 
 
-def delete_file(rel_path: Optional[str]) -> None:
-    """删除单个相对路径对应的文件，忽略不存在的情况。"""
+def file_exists(rel_path: str, storage: str = "local", cos: Optional[dict] = None) -> bool:
+    """判断某个版本的文件是否还在（本地磁盘或 COS）。"""
+    if storage == "cos":
+        if not cos:
+            return False
+        try:
+            storage_config.build_client(cos).head_object(
+                Bucket=cos["bucket"], Key=rel_path
+            )
+            return True
+        except Exception:  # noqa: BLE001 - 不存在或请求失败都按「不可用」处理
+            return False
+    return resolve_path(rel_path).exists()
+
+
+def delete_file(rel_path: Optional[str], storage: str = "local", cos: Optional[dict] = None) -> None:
+    """删除单个文件，忽略不存在的情况。"""
     if not rel_path:
+        return
+    if storage == "cos":
+        if not cos:
+            return
+        try:
+            storage_config.build_client(cos).delete_object(
+                Bucket=cos["bucket"], Key=rel_path
+            )
+        except Exception:  # noqa: BLE001 - 删除失败不应阻断主流程
+            pass
         return
     try:
         resolve_path(rel_path).unlink(missing_ok=True)
@@ -123,7 +169,7 @@ def delete_file(rel_path: Optional[str]) -> None:
 
 
 def delete_asset_dir(project_id: int, asset_id: int) -> None:
-    """删除某个资产的全部版本文件目录。"""
+    """删除某个资产在本地的全部版本目录。"""
     target = (
         Path(settings.upload_dir)
         / "projects"
@@ -132,3 +178,14 @@ def delete_asset_dir(project_id: int, asset_id: int) -> None:
         / str(asset_id)
     )
     shutil.rmtree(target, ignore_errors=True)
+
+
+def presigned_url(key: str, cos: dict, expires: int = 600) -> str:
+    """生成 COS 临时下载链接（有效期默认 10 分钟）。"""
+    client = storage_config.build_client(cos)
+    return client.get_presigned_url(
+        Method="GET",
+        Bucket=cos["bucket"],
+        Key=key,
+        Expired=expires,
+    )

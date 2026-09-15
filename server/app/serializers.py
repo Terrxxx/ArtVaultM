@@ -57,6 +57,7 @@ def asset_to_dict(
         "category_name": a.category.name if a.category else None,
         "project_name": a.project.name if a.project else None,
         "project_slug": a.project.slug if a.project else None,
+        "project_owner": user_brief(a.project.owner) if a.project else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "version_count": len(a.versions),
         "latest_version": version_to_dict(latest) if latest else None,

@@ -28,7 +28,6 @@ const SYSTEM_CATEGORY_HINT = '模型、贴图与材质、动画、特效、音�
 
 export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
-  const [discover, setDiscover] = useState<Project[]>([])
   const [archived, setArchived] = useState(false)
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -41,12 +40,7 @@ export default function ProjectList() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [myProjects, publicProjects] = await Promise.all([
-        api.listProjects(archived, 'mine'),
-        archived ? Promise.resolve([]) : api.randomPublicProjects(8),
-      ])
-      setMine(myProjects)
-      setDiscover(publicProjects)
+      setMine(await api.listProjects(archived))
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
     } finally {
@@ -168,31 +162,13 @@ export default function ProjectList() {
         <div style={{ textAlign: 'center', padding: 80 }}>
           <Spin size="large" />
         </div>
+      ) : mine.length === 0 ? (
+        <Empty
+          description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
+          style={{ marginTop: 80 }}
+        />
       ) : (
-        <Space direction="vertical" size={32} style={{ width: '100%' }}>
-          <div>
-            {mine.length === 0 ? (
-              <Empty
-                description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
-                style={{ marginTop: 24, marginBottom: 24 }}
-              />
-            ) : (
-              <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
-            )}
-          </div>
-
-          {!archived && discover.length > 0 && (
-            <div>
-              <Typography.Title level={5} style={{ marginBottom: 12 }}>
-                发现公开项目
-                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
-                  随机推荐
-                </Typography.Text>
-              </Typography.Title>
-              <Row gutter={[16, 16]}>{discover.map(renderCard)}</Row>
-            </div>
-          )}
-        </Space>
+        <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
       )}
 
       <Modal

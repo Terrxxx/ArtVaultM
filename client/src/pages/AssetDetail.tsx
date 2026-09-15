@@ -26,7 +26,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, downloadFile, formatSize, thumbUrl, uploadUrl } from '../api'
 import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
+import OnlinePreview, { previewKind } from '../components/OnlinePreview'
 import UploadVersionModal from '../components/UploadVersionModal'
+import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
 // 版本历史默认展示的条数，容器高度按这个条数固定
@@ -75,9 +77,10 @@ export default function AssetDetail() {
   const current = versions.find((v) => v.id === previewVersion) || versions[0]
   // 优先展示所选版本的缩略图，没有则回落到资产封面
   const previewSrc = thumbUrl(current?.thumbnail) || thumbUrl(asset.cover_thumbnail)
-  const canWrite = user?.role === 'admin' || user?.id === asset.created_by
+  const canWrite = user?.id === asset.created_by || isSuperAdmin(user?.role)
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
+  const canPreview = previewKind(current?.file_format) !== 'none'
 
   const toggleLike = async () => {
     const res = await api.toggleLike(assetId)
@@ -102,22 +105,28 @@ export default function AssetDetail() {
         <Row gutter={16}>
           <Col xs={24} md={10}>
             <Card styles={{ body: { padding: 0 } }}>
-              {previewSrc ? (
-                <img src={previewSrc} alt={asset.name} style={{ width: '100%', display: 'block' }} />
-              ) : (
-                <div
-                  style={{
-                    height: 260,
-                    background: '#f0f0f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#c0c0c0',
-                  }}
-                >
-                  <FileOutlined style={{ fontSize: 56 }} />
-                </div>
-              )}
+              <OnlinePreview
+                version={current || null}
+                assetName={asset.name}
+                fallback={
+                  previewSrc ? (
+                    <img src={previewSrc} alt={asset.name} style={{ width: '100%', display: 'block' }} />
+                  ) : (
+                    <div
+                      style={{
+                        height: 260,
+                        background: '#f0f0f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#c0c0c0',
+                      }}
+                    >
+                      <FileOutlined style={{ fontSize: 56 }} />
+                    </div>
+                  )
+                }
+              />
             </Card>
             {current && (
               <Typography.Text
@@ -126,6 +135,7 @@ export default function AssetDetail() {
               >
                 正在预览 v{current.version}
                 {current.is_latest ? '（最新）' : ''}
+                {!canPreview && ' · 该格式不支持在线预览，展示的是缩略图'}
               </Typography.Text>
             )}
           </Col>

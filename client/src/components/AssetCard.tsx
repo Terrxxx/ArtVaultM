@@ -1,14 +1,14 @@
 import { Card, Space, Tag, Typography } from 'antd'
 import { FileOutlined, LikeOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { thumbUrl } from '../api'
+import { assetPath, thumbUrl } from '../api'
 import type { Asset } from '../types'
 
 export default function AssetCard({ asset }: { asset: Asset }) {
   const cover = thumbUrl(asset.cover_thumbnail)
 
   return (
-    <Link to={`/assets/${asset.id}`}>
+    <Link to={assetPath(asset)}>
       <Card
         hoverable
         styles={{ body: { padding: 12 } }}

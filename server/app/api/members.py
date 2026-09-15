@@ -6,7 +6,7 @@ from ..database import get_db
 from ..models import Project, ProjectMember, User
 from ..serializers import member_to_dict, project_to_dict
 from ..services import notify
-from .deps import ensure_project_access, ensure_project_owner, get_current_user
+from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ def invite_member(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    project = ensure_project_owner(db, project_id, user)
+    project = ensure_project_editor(db, project_id, user)
 
     target = db.get(User, payload.user_id)
     if target is None or target.status != "active":
@@ -86,7 +86,7 @@ def remove_member(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ensure_project_owner(db, project_id, user)
+    ensure_project_editor(db, project_id, user)
     member = db.get(ProjectMember, member_id)
     if member is None or member.project_id != project_id:
         raise HTTPException(status_code=404, detail="成员不存在")

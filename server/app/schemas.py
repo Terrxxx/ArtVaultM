@@ -78,6 +78,18 @@ class SubscribeRequest(BaseModel):
     target_id: int
 
 
+# ---------- 对象存储配置 ----------
+class StorageConfigIn(BaseModel):
+    provider: Optional[str] = None  # local / cos
+    cos_secret_id: Optional[str] = None
+    # 提交掩码或空串表示不修改已保存的密钥
+    cos_secret_key: Optional[str] = None
+    cos_region: Optional[str] = None
+    cos_bucket: Optional[str] = None
+    cos_app_id: Optional[str] = None
+    cos_prefix: Optional[str] = None
+
+
 # ---------- 资产关联 ----------
 class RelationCreate(BaseModel):
     to_asset_id: int

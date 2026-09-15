@@ -51,6 +51,7 @@ export interface Asset {
   category_name?: string | null
   project_name?: string | null
   project_slug?: string | null
+  project_owner?: UserBrief | null
   created_at?: string
   version_count: number
   latest_version?: Version | null
@@ -143,4 +144,36 @@ export interface UserProfile {
     github_repo_url?: string | null
     assets: Asset[]
   }[]
+}
+
+/** 管理后台项目列表项：多一个 can_edit 标记（仅高级管理员为 true） */
+export interface AdminProject extends Project {
+  can_edit?: boolean
+}
+
+export interface StorageConfig {
+  provider: 'local' | 'cos'
+  cos_secret_id?: string | null
+  cos_secret_key_set: boolean
+  cos_region?: string | null
+  cos_bucket?: string | null
+  cos_app_id?: string | null
+  cos_prefix: string
+  updated_at?: string | null
+}
+
+export type Role = 'member' | 'admin' | 'super_admin'
+
+export const ROLE_LABEL: Record<string, string> = {
+  member: '成员',
+  admin: '管理员',
+  super_admin: '高级管理员',
+}
+
+export function isSuperAdmin(role?: string | null): boolean {
+  return role === 'super_admin'
+}
+
+export function isAdminLike(role?: string | null): boolean {
+  return role === 'admin' || role === 'super_admin'
 }

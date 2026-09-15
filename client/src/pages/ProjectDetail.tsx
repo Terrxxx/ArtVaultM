@@ -24,6 +24,7 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath } from '../api'
 import type { Asset, Category, Project } from '../types'
+import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
 import UploadAssetModal from '../components/UploadAssetModal'
 import { useAuthStore } from '../store'
@@ -65,9 +66,13 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     load()
   }, [load])
 
-  const isOwner = me?.role === 'admin' || project.owner_id === me?.id
-  // 上传需要先受邀加入项目（所有者/管理员/已接受的成员）
-  const isMember = isOwner || (project.members || []).some((m) => m.user?.id === me?.id)
+  // 编辑项目：仅创建者本人或高级管理员
+  const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
+  // 上传资产：需要先受邀加入项目（所有者/成员），高级管理员例外
+  const isMember =
+    canEdit ||
+    project.owner_id === me?.id ||
+    (project.members || []).some((m) => m.user?.id === me?.id)
 
   const toggleSubscribe = async () => {
     try {
@@ -105,7 +110,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             >
               {subscribed ? '已订阅' : '订阅'}
             </Button>
-            {isOwner && (
+            {canEdit && (
               <Button
                 size="small"
                 icon={<EditOutlined />}

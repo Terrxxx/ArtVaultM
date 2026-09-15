@@ -8,10 +8,10 @@
 
 | 层 | 选型 |
 |---|---|
-| 前端 | React 18 + Vite + TypeScript + Ant Design + Zustand + React Router + axios |
-| 后端 | Python 3.9+ + FastAPI + SQLAlchemy 2.0 + Pydantic v2 + JWT + bcrypt |
+| 前端 | React 18 + Vite + TypeScript + Ant Design + Zustand + React Router + axios + three.js（3D 预览） |
+| 后端 | Python 3.9+ + FastAPI + SQLAlchemy 2.0 + Pydantic v2 + JWT + bcrypt + pypinyin（项目 slug） |
 | 数据库 | SQLite（开发，零配置） |
-| 文件存储 | 本地磁盘 `server/uploads/`（已 gitignore） |
+| 文件存储 | 本地磁盘 `server/uploads/` 或 **腾讯云 COS**（`cos-python-sdk-v5`，高级管理员在后台切换） |
 
 ## 目录结构
 
@@ -49,11 +49,11 @@ python -m venv .venv
 .venv/Scripts/python -m uvicorn app.main:app --host 127.0.0.1 --port 130 --reload
 ```
 
-首次启动会自动建表并创建一个默认管理员：
+首次启动会自动建表并创建一个默认管理员（**高级管理员**）：
 
-| 用户名 | 密码 |
-|---|---|
-| `admin` | `admin123` |
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `admin` | `admin123` | 高级管理员 |
 
 （登录后请尽快到「管理后台」修改/注册账号。）
 
@@ -95,12 +95,25 @@ cd server
 - ✅ 版本历史显示各版本下载数；版本列表默认展示最新 4 个，可展开（容器固定 4 项高度、可滚动）
 - ✅ 资产点赞、用户个人资料页（含 GitHub 主页）
 - ✅ 上传文件 SHA256 哈希去重（同项目内同内容复用物理文件）
-- ✅ 独立的**项目编辑页**（基本信息 / 分类管理 / 成员管理 / 归档与删除）
-- ✅ 独立的**资产编辑页**（基本信息 / 资产关联 / 删除）
-- ✅ 项目地址为 `/{用户名}/{slug}`，中文项目名自动转拼音、空格转 `-`
-- ✅ 主页展示「我的项目」+「发现公开项目（随机）」
-- ✅ 管理后台：用户管理（改昵称/角色/启停）+ 全部项目管理（含私有）
-- ⬜ 在线预览（3D 模型 three.js / 视频 / 音频）
+- ✅ 独立的**项目编辑页**与**资产编辑页**（资产关联为只读展示）
+- ✅ 项目地址 `/{用户名}/{slug}`（中文转拼音）、资产地址 `/{用户名}/{slug}/{id}`
+- ✅ 三级角色：成员 / 管理员 / **高级管理员**
+- ✅ **在线预览**：图片、视频、音频、3D 模型（.gltf/.glb，three.js 旋转查看，单独分包按需加载）
+- ✅ **腾讯云 COS 对象存储**：高级管理员在后台配置，资产上传到桶内 `artvaultm/` 目录，下载/预览时签发临时链接
+- ✅ 管理后台：用户管理（昵称/角色/启停）、全部项目管理（含私有项目）、对象存储配置
+
+## 角色与权限
+
+| 能力 | 成员 | 管理员 | 高级管理员 |
+|---|---|---|---|
+| 浏览公开项目 / 下载 / 评论 / 点赞 | ✅ | ✅ | ✅ |
+| 上传资产（需先受邀加入项目） | ✅ | ✅ | ✅ |
+| 编辑项目/资产 | 仅自己创建的 | 仅自己创建的 | **任意**（含后台入口） |
+| 管理用户 | ✗ | 仅普通成员 | **所有人** |
+| 调整用户角色 / 配置对象存储 | ✗ | ✗ | ✅ |
+| 查看全部项目（含他人私有） | ✗ | 仅后台、**只读** | 后台、**可编辑** |
+
+> 「我的项目」列表对所有角色一致：只显示自己创建或受邀加入的项目。
 
 ## 接口速查（前缀 `/api`）
 
@@ -108,18 +121,29 @@ cd server
 |---|---|
 | 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
 | 用户 | `GET /users/search?q=` · `GET /users/{id}`（个人资料） |
-| 项目 | `POST/GET /projects`（`scope=mine|public`）· `GET /projects/public/random` · `GET /projects/by-slug/{username}/{slug}` · `GET/PATCH/DELETE /projects/{id}` |
+| 项目 | `POST/GET /projects` · `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
 | 分类 | `GET/POST /projects/{id}/categories` · `PATCH/DELETE /categories/{id}` |
 | 资产 | `GET/POST /projects/{id}/assets`（`q` 全局搜索）· `GET/PATCH/DELETE /assets/{id}` |
 | 版本 | `GET/POST /assets/{id}/versions` · `GET /versions/{id}/download` · `DELETE /versions/{id}` |
+| 预览 | `GET /versions/{id}/stream-token`（换取短期令牌）· `GET /versions/{id}/stream?t=` |
 | 点赞 | `POST /assets/{id}/like`（切换） |
 | 资产关联 | `GET/POST /assets/{id}/relations` · `DELETE /relations/{id}` |
 | 评论 | `GET/POST /assets/{id}/comments`（`version_id` 筛选）· `DELETE /comments/{id}` |
 | 订阅 | `GET /subscriptions` · `POST /subscriptions/toggle` |
 | 消息 | `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/{id}/read` · `POST /notifications/read-all` |
-| 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `GET /admin/projects`（含私有） |
+| 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `GET /admin/projects`（含私有，带 `can_edit`） |
+| 对象存储 | `GET/PUT /admin/storage-config` · `POST /admin/storage-config/test`（仅高级管理员） |
+
+## 在线预览说明
+
+`<img>/<video>/<audio>` 无法携带 Authorization 头，因此预览走「短期令牌」：
+前端先向 `stream-token` 换取一个**只对当前版本有效、10 分钟过期**的令牌，
+再用它访问 `stream` 接口（不计入下载次数）。COS 模式下 `stream` 会 307 跳转到临时签名 URL。
+
+支持的格式：图片 `png/jpg/jpeg/gif/webp/bmp/svg/avif`；视频 `mp4/webm/mov/m4v/ogv`；
+音频 `mp3/wav/ogg/m4a/flac/aac`；3D 模型 `gltf/glb`（three.js，按需加载）。其余格式回落到缩略图。
 
 ## 数据库迁移
 

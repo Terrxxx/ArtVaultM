@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Avatar, Button, Card, Form, Input, Space, Typography, Upload, message } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
 import { api, uploadUrl } from '../api'
+import { ROLE_LABEL } from '../types'
 import { useAuthStore } from '../store'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
@@ -61,7 +62,7 @@ export default function Settings() {
             <br />
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
               @{user?.username}
-              {user?.role === 'admin' && ' · 管理员'}
+              {user?.role && user.role !== 'member' && ` · ${ROLE_LABEL[user.role] || user.role}`}
             </Typography.Text>
           </div>
         </Space>
