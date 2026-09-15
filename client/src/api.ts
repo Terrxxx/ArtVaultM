@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from './store'
 import type {
+  ActivityItem,
   AdminProject,
   Asset,
   AssetRelation,
@@ -50,7 +51,22 @@ export const api = {
   // ---------- 项目 ----------
   listProjects: (archived = false) =>
     client.get<Project[]>('/projects', { params: { archived } }).then((r) => r.data),
+  /** 广场：按热度值排序的公开项目（默认排除自己的，避免与「我的项目」重复） */
+  listPlaza: (limit = 6, excludeOwn = true) =>
+    client
+      .get<Project[]>('/projects/plaza', { params: { limit, exclude_own: excludeOwn } })
+      .then((r) => r.data),
   getProject: (id: number) => client.get<Project>(`/projects/${id}`).then((r) => r.data),
+  getProjectActivity: (id: number, days = 180) =>
+    client
+      .get<{ days: number; items: ActivityItem[] }>(`/projects/${id}/activity`, { params: { days } })
+      .then((r) => r.data),
+  getUserActivity: (username: string, days = 180) =>
+    client
+      .get<{ days: number; items: ActivityItem[] }>(`/users/by-username/${username}/activity`, {
+        params: { days },
+      })
+      .then((r) => r.data),
   getProjectBySlug: (username: string, slug: string) =>
     client.get<Project>(`/projects/by-slug/${username}/${slug}`).then((r) => r.data),
   createProject: (data: {

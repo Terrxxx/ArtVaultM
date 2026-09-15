@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Avatar,
   Button,
+  Card,
   Col,
   Empty,
   Input,
@@ -25,9 +26,10 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
-import type { Asset, Category, Project } from '../types'
+import type { ActivityItem, Asset, Category, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
+import Heatmap from '../components/Heatmap'
 import UploadAssetModal from '../components/UploadAssetModal'
 import { useAuthStore } from '../store'
 
@@ -39,6 +41,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -47,11 +50,13 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [fresh, subs] = await Promise.all([
+      const [fresh, subs, act] = await Promise.all([
         api.getProject(project.id),
         api.listSubscriptions(),
+        api.getProjectActivity(project.id).catch(() => ({ items: [] })),
       ])
       setProject(fresh)
+      setActivity(act.items)
       setSubscribed(subs.some((s) => s.target_type === 'project' && s.target_id === project.id))
       const params: Record<string, unknown> = {}
       if (categoryId) params.category_id = categoryId
@@ -181,6 +186,10 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             ))}
           </Row>
         )}
+
+        <Card title="更新热力图">
+          <Heatmap items={activity} />
+        </Card>
       </Space>
 
       <UploadAssetModal

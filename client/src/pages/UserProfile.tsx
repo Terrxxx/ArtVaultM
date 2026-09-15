@@ -3,13 +3,15 @@ import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography 
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
-import type { UserProfile } from '../types'
+import type { ActivityItem, UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
+import Heatmap from '../components/Heatmap'
 
 export default function UserProfilePage() {
   // 路由为 /{用户名}
   const { username } = useParams()
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,10 +19,14 @@ export default function UserProfilePage() {
     let alive = true
     setLoading(true)
     setError(null)
-    api
-      .getUserProfileByUsername(String(username))
-      .then((p) => {
-        if (alive) setProfile(p)
+    Promise.all([
+      api.getUserProfileByUsername(String(username)),
+      api.getUserActivity(String(username)).catch(() => ({ items: [] })),
+    ])
+      .then(([p, act]) => {
+        if (!alive) return
+        setProfile(p)
+        setActivity(act.items)
       })
       .catch((e) => {
         if (alive) setError(e.response?.data?.detail || '用户不存在')
@@ -70,6 +76,10 @@ export default function UserProfilePage() {
             <Statistic title="版本总数" value={stats.version_count} />
           </Space>
         </Space>
+      </Card>
+
+      <Card title="更新热力图" style={{ marginBottom: 20 }}>
+        <Heatmap items={activity} />
       </Card>
 
       {projects.length === 0 ? (

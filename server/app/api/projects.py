@@ -7,6 +7,7 @@ from ..database import get_db
 from ..models import Category, Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
 from ..serializers import project_to_dict
+from ..services import stats
 from ..services.slug import slugify
 from .deps import (
     ensure_project_access,
@@ -126,6 +127,47 @@ def get_project_by_slug(
         raise HTTPException(status_code=404, detail="项目不存在")
     ensure_project_access(db, project.id, user)
     return project_to_dict(project, include_categories=True, include_members=True)
+
+
+@router.get("/projects/plaza")
+def plaza(
+    limit: int = 6,
+    exclude_own: bool = True,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """广场：按热度值排序的公开项目。
+
+    热度值综合资产数、分类数、下载数与近 30 天更新频率，算法见 services/stats.py。
+    默认排除自己拥有的项目，避免和上方「我的项目」重复。
+    """
+    query = db.query(Project).filter(
+        Project.visibility == "public", Project.is_archived.is_(False)
+    )
+    if exclude_own:
+        query = query.filter(Project.owner_id != user.id)
+    projects = query.all()
+    scores = stats.heat_scores(db, [p.id for p in projects])
+    projects.sort(key=lambda p: scores.get(p.id, 0.0), reverse=True)
+    return [
+        {**project_to_dict(p), "heat": scores.get(p.id, 0.0)}
+        for p in projects[: max(1, min(limit, 50))]
+    ]
+
+
+@router.get("/projects/{project_id}/activity")
+def project_activity(
+    project_id: int,
+    days: int = 180,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """项目更新热力图：按天统计版本上传次数。"""
+    ensure_project_access(db, project_id, user)
+    return {
+        "days": days,
+        "items": stats.daily_version_counts(db, days=days, project_id=project_id),
+    }
 
 
 @router.get("/projects/{project_id}")

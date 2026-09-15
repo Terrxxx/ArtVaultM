@@ -36,6 +36,7 @@ const SYSTEM_CATEGORY_HINT = '模型、贴图与材质、动画、特效、音�
 
 export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
+  const [plaza, setPlaza] = useState<Project[]>([])
   const [archived, setArchived] = useState(false)
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -48,7 +49,13 @@ export default function ProjectList() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setMine(await api.listProjects(archived))
+      const [myProjects, hot] = await Promise.all([
+        api.listProjects(archived),
+        // 广场只展示进行中的公开项目，归档视图下不展示
+        archived ? Promise.resolve([]) : api.listPlaza(6),
+      ])
+      setMine(myProjects)
+      setPlaza(hot)
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
     } finally {
@@ -136,6 +143,7 @@ export default function ProjectList() {
             </Link>
           )}
           <Space size={8} wrap>
+            {typeof p.heat === 'number' && <Tag color="volcano">热度 {p.heat}</Tag>}
             <Tag>{p.asset_count} 个资产</Tag>
             <Tag>{p.category_count} 个分类</Tag>
             {p.member_count > 0 && <Tag color="blue">{p.member_count} 位成员</Tag>}
@@ -184,13 +192,34 @@ export default function ProjectList() {
         <div style={{ textAlign: 'center', padding: 80 }}>
           <Spin size="large" />
         </div>
-      ) : mine.length === 0 ? (
-        <Empty
-          description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
-          style={{ marginTop: 80 }}
-        />
       ) : (
-        <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
+        <Space direction="vertical" size={28} style={{ width: '100%' }}>
+          <div>
+            {mine.length === 0 ? (
+              <Empty
+                description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
+                style={{ marginTop: 24, marginBottom: 24 }}
+              />
+            ) : (
+              <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
+            )}
+          </div>
+
+          {plaza.length > 0 && (
+            <div>
+              <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                广场
+                <Typography.Text
+                  type="secondary"
+                  style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
+                >
+                  按热度推荐公开项目
+                </Typography.Text>
+              </Typography.Title>
+              <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
+            </div>
+          )}
+        </Space>
       )}
 
       <Modal

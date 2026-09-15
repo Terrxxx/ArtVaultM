@@ -89,6 +89,8 @@ export interface Project {
   category_count: number
   member_count: number
   pending_count: number
+  /** 广场热度值（仅 /projects/plaza 返回） */
+  heat?: number
   categories?: Category[]
   members?: ProjectMember[]
   pending_members?: ProjectMember[]
@@ -169,6 +171,12 @@ export interface StorageConfig {
 }
 
 export type Role = 'member' | 'admin' | 'super_admin'
+
+/** 热力图的单日活跃度 */
+export interface ActivityItem {
+  date: string
+  count: number
+}
 
 export const ROLE_LABEL: Record<string, string> = {
   member: '成员',

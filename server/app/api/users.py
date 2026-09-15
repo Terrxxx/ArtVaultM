@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Asset, User
 from ..serializers import asset_to_dict, user_brief
+from ..services import stats
 from .deps import get_current_user, viewable_project_ids
 
 router = APIRouter()
@@ -63,6 +64,23 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
             "version_count": sum(len(a.versions) for a in assets),
         },
         "projects": projects,
+    }
+
+
+@router.get("/users/by-username/{username}/activity")
+def user_activity_by_username(
+    username: str,
+    days: int = 180,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """个人更新热力图：按天统计该用户上传的版本数。"""
+    target = db.query(User).filter(User.username == username).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return {
+        "days": days,
+        "items": stats.daily_version_counts(db, days=days, user_id=target.id),
     }
 
 

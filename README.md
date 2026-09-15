@@ -107,7 +107,21 @@ cd server
 - ✅ 项目卡片与详情展示**创建者头像与主页链接**；评论、版本、上传者、成员、后台用户列表等
   所有出现用户的地方都带头像
 - ✅ 下载改为**浏览器原生直链**（不再用 XHR 取 blob），避免跨域访问 COS 被 CORS 拦截，大文件也不占内存
+- ✅ 主页**广场**：按热度值推荐 6 个公开项目（默认排除自己的项目，避免与「我的项目」重复）
+- ✅ **更新热力图**：个人主页与项目主页各一张，参考 GitHub 的按天活跃度格子（近 26 周）
 - ✅ 管理后台：用户管理（昵称/角色/启停）、全部项目管理（含私有项目）、对象存储配置
+
+## 热度值算法
+
+「广场」按热度值排序，权重集中在 [stats.py](server/app/services/stats.py)：
+
+```
+热度 = 2 × 资产数 + 1 × 分类数 + 4 × log2(1 + 下载数) + 10 × 近30天新增版本数
+```
+
+- 下载数取 `log2` 是为了避免个别大项目刷榜
+- 近 30 天更新权重最高，「热」体现在近期活跃
+- 只统计**公开且未归档**的项目
 
 ## 角色与权限
 
@@ -127,8 +141,8 @@ cd server
 | 分组 | 主要接口 |
 |---|---|
 | 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
-| 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `GET /users/{id}` |
-| 项目 | `POST/GET /projects` · `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
+| 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `GET /users/by-username/{username}/activity`（热力图）· `GET /users/{id}` |
+| 项目 | `POST/GET /projects` · `GET /projects/plaza`（广场热度榜）· `GET /projects/{id}/activity`（热力图）· `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
 | 分类 | `GET/POST /projects/{id}/categories` · `PATCH/DELETE /categories/{id}` |
