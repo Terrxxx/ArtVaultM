@@ -1,0 +1,128 @@
+# 艺库 ArtVault
+
+面向游戏开发团队的美术资产管理与版本协作平台。绑定 GitHub 仓库，覆盖 **上传 → 分类 → 版本管理 → 在线预览 → 评论协作 → 下载分发** 全流程。
+
+完整产品与技术规格见 [`docs/DESIGN.md`](docs/DESIGN.md)。
+
+## 技术栈
+
+| 层 | 选型 |
+|---|---|
+| 前端 | React 18 + Vite + TypeScript + Ant Design + Zustand + React Router + axios |
+| 后端 | Python 3.9+ + FastAPI + SQLAlchemy 2.0 + Pydantic v2 + JWT + bcrypt |
+| 数据库 | SQLite（开发，零配置） |
+| 文件存储 | 本地磁盘 `server/uploads/`（已 gitignore） |
+
+## 目录结构
+
+```
+ArtVaultM/
+├── docs/DESIGN.md        # 产品与技术规格
+├── client/               # 前端（React + Vite + TS）
+│   └── src/
+│       ├── components/   # Layout / AssetCard / 上传弹窗 / 评论
+│       ├── pages/        # Login / ProjectList / ProjectDetail / AssetDetail / Admin
+│       ├── api.ts        # axios 封装 + API 方法
+│       ├── store.ts      # zustand 登录态
+│       └── types.ts      # 类型定义
+└── server/               # 后端（FastAPI）
+    ├── app/
+    │   ├── main.py       # 入口 + 路由 + 静态文件挂载
+    │   ├── models.py     # SQLAlchemy 模型
+    │   ├── schemas.py    # Pydantic schema
+    │   ├── serializers.py
+    │   ├── core/security.py
+    │   ├── services/storage.py
+    │   └── api/          # auth / admin / projects / categories / assets / versions / comments
+    ├── smoke_test.py     # 后端冒烟测试
+    └── requirements.txt
+```
+
+## 快速开始
+
+### 1. 启动后端（端口 130）
+
+```bash
+cd server
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python -m uvicorn app.main:app --host 127.0.0.1 --port 130 --reload
+```
+
+首次启动会自动建表并创建一个默认管理员：
+
+| 用户名 | 密码 |
+|---|---|
+| `admin` | `admin123` |
+
+（登录后请尽快到「管理后台」修改/注册账号。）
+
+### 2. 启动前端（端口 5173）
+
+```bash
+cd client
+npm install --include=dev   # 注意 --include=dev，见下方说明
+npm run dev
+```
+
+浏览器打开 http://localhost:5173 ，登录后即可使用。
+
+### 3. 冒烟测试（可选）
+
+```bash
+cd server
+.venv/Scripts/python smoke_test.py
+```
+
+## 注意事项
+
+- **`--include=dev`**：若本机设置了 `NODE_ENV=production`，npm 会默认跳过 devDependencies，导致 vite/ts 缺失。安装时务必加 `--include=dev`。
+- **Python 3.9**：依赖已固定到有 Windows cp39 预编译 wheel 的版本（`greenlet==3.0.3`、`bcrypt==4.0.1`）。
+- 前端通过 Vite 代理把 `/api` 和 `/uploads` 转发到 `http://127.0.0.1:8000`，无需额外跨域配置。
+
+## 当前进度
+
+- ✅ M1 后端骨架 + 数据模型 + JWT 认证 + 管理员注册账号
+- ✅ M2 项目/分类/资产/版本 CRUD + 文件上传下载 + 评论
+- ✅ P0 前端：登录 / 项目列表 / 项目详情 / 资产详情 / 管理后台 / 个人设置
+- ✅ 版本历史最新在上；评论可关联版本并按版本筛选
+- ✅ 缩略图按版本独立存储（每个版本有自己的缩略图，详情页可切换预览）
+- ✅ 项目编辑、项目归档
+- ✅ 创建项目时可选「系统默认分类」或「自定义分类」
+- ✅ 项目成员邀请（输入昵称实时搜索，**需对方同意后**才成为成员）
+- ✅ 项目订阅 / 资产订阅 + 消息提醒中心（评论 / @提及 / 邀请 / 订阅更新）
+- ✅ 评论 @ 提及（输入 @ 联想、正文高亮、被提及者收到消息）
+- ✅ 版本历史显示各版本下载数；版本列表默认展示最新 4 个，可展开（容器固定 4 项高度、可滚动）
+- ✅ 资产点赞、用户个人资料页（含 GitHub 主页）
+- ✅ 上传文件 SHA256 哈希去重（同项目内同内容复用物理文件）
+- ✅ 独立的**项目编辑页**（基本信息 / 分类管理 / 成员管理 / 归档与删除）
+- ✅ 独立的**资产编辑页**（基本信息 / 资产关联 / 删除）
+- ✅ 项目地址为 `/{用户名}/{slug}`，中文项目名自动转拼音、空格转 `-`
+- ✅ 主页展示「我的项目」+「发现公开项目（随机）」
+- ✅ 管理后台：用户管理（改昵称/角色/启停）+ 全部项目管理（含私有）
+- ⬜ 在线预览（3D 模型 three.js / 视频 / 音频）
+
+## 接口速查（前缀 `/api`）
+
+| 分组 | 主要接口 |
+|---|---|
+| 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
+| 用户 | `GET /users/search?q=` · `GET /users/{id}`（个人资料） |
+| 项目 | `POST/GET /projects`（`scope=mine|public`）· `GET /projects/public/random` · `GET /projects/by-slug/{username}/{slug}` · `GET/PATCH/DELETE /projects/{id}` |
+| 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
+| 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
+| 分类 | `GET/POST /projects/{id}/categories` · `PATCH/DELETE /categories/{id}` |
+| 资产 | `GET/POST /projects/{id}/assets`（`q` 全局搜索）· `GET/PATCH/DELETE /assets/{id}` |
+| 版本 | `GET/POST /assets/{id}/versions` · `GET /versions/{id}/download` · `DELETE /versions/{id}` |
+| 点赞 | `POST /assets/{id}/like`（切换） |
+| 资产关联 | `GET/POST /assets/{id}/relations` · `DELETE /relations/{id}` |
+| 评论 | `GET/POST /assets/{id}/comments`（`version_id` 筛选）· `DELETE /comments/{id}` |
+| 订阅 | `GET /subscriptions` · `POST /subscriptions/toggle` |
+| 消息 | `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/{id}/read` · `POST /notifications/read-all` |
+| 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `GET /admin/projects`（含私有） |
+
+## 数据库迁移
+
+项目未使用 Alembic。新表由 `Base.metadata.create_all` 自动创建；已存在的表新增列由
+[main.py](server/app/main.py) 的 `ensure_columns()` 在启动时幂等 `ALTER TABLE` 补齐，
+历史项目缺少的 slug 由 `backfill_slugs()` 按拼音补全。

@@ -1,0 +1,61 @@
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from ..core.security import create_access_token, hash_password, verify_password
+from ..database import get_db
+from ..models import User
+from ..schemas import ChangePasswordRequest, LoginRequest, Token, UserOut
+from ..services import storage
+from .deps import get_current_user
+
+router = APIRouter()
+
+
+@router.post("/login", response_model=Token)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == payload.username).first()
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="账号已被禁用")
+    token = create_access_token(user.id, user.role)
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@router.get("/me", response_model=UserOut)
+def me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/profile", response_model=UserOut)
+def update_profile(
+    nickname: Optional[str] = Form(None),
+    github_url: Optional[str] = Form(None),
+    avatar: Optional[UploadFile] = File(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if nickname is not None:
+        user.nickname = nickname
+    if github_url is not None:
+        user.github_url = github_url or None
+    if avatar is not None and avatar.filename:
+        user.avatar = storage.save_avatar(user.id, avatar)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}

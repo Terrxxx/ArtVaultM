@@ -1,0 +1,220 @@
+import axios from 'axios'
+import { useAuthStore } from './store'
+import type {
+  Asset,
+  AssetRelation,
+  Category,
+  Comment,
+  DownloadStats,
+  Invitation,
+  Notification,
+  Project,
+  ProjectMember,
+  User,
+  UserBrief,
+  UserProfile,
+  Version,
+} from './types'
+
+const client = axios.create({ baseURL: '/api' })
+
+client.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+client.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      useAuthStore.getState().logout()
+    }
+    return Promise.reject(err)
+  },
+)
+
+export const api = {
+  // ---------- 认证 ----------
+  login: (username: string, password: string) =>
+    client.post<{ access_token: string }>('/auth/login', { username, password }).then((r) => r.data),
+  me: () => client.get<User>('/auth/me').then((r) => r.data),
+  updateProfile: (form: FormData) => client.patch<User>('/auth/profile', form).then((r) => r.data),
+  changePassword: (old_password: string, new_password: string) =>
+    client.post('/auth/change-password', { old_password, new_password }).then((r) => r.data),
+
+  // ---------- 项目 ----------
+  listProjects: (archived = false, scope: 'mine' | 'public' = 'mine') =>
+    client.get<Project[]>('/projects', { params: { archived, scope } }).then((r) => r.data),
+  randomPublicProjects: (limit = 8) =>
+    client.get<Project[]>('/projects/public/random', { params: { limit } }).then((r) => r.data),
+  getProject: (id: number) => client.get<Project>(`/projects/${id}`).then((r) => r.data),
+  getProjectBySlug: (username: string, slug: string) =>
+    client.get<Project>(`/projects/by-slug/${username}/${slug}`).then((r) => r.data),
+  createProject: (data: {
+    name: string
+    description?: string
+    github_repo_url?: string
+    visibility: string
+    category_mode: string
+    custom_categories?: string[]
+  }) => client.post<Project>('/projects', data).then((r) => r.data),
+  updateProject: (id: number, data: Record<string, unknown>) =>
+    client.patch<Project>(`/projects/${id}`, data).then((r) => r.data),
+  deleteProject: (id: number) => client.delete(`/projects/${id}`).then((r) => r.data),
+
+  // ---------- 项目成员 ----------
+  listMembers: (projectId: number) =>
+    client
+      .get<{ members: ProjectMember[]; pending: ProjectMember[] }>(`/projects/${projectId}/members`)
+      .then((r) => r.data),
+  inviteMember: (projectId: number, userId: number) =>
+    client.post(`/projects/${projectId}/members`, { user_id: userId }).then((r) => r.data),
+  removeMember: (projectId: number, memberId: number) =>
+    client.delete(`/projects/${projectId}/members/${memberId}`).then((r) => r.data),
+
+  // ---------- 收到的邀请 ----------
+  listInvitations: () => client.get<Invitation[]>('/invitations').then((r) => r.data),
+  acceptInvitation: (memberId: number) =>
+    client.post(`/invitations/${memberId}/accept`).then((r) => r.data),
+  declineInvitation: (memberId: number) =>
+    client.post(`/invitations/${memberId}/decline`).then((r) => r.data),
+
+  // ---------- 用户 ----------
+  searchUsers: (q: string) =>
+    client.get<UserBrief[]>('/users/search', { params: { q } }).then((r) => r.data),
+  getUserProfile: (id: number) => client.get<UserProfile>(`/users/${id}`).then((r) => r.data),
+
+  // ---------- 分类 ----------
+  listCategories: (projectId: number) =>
+    client.get<Category[]>(`/projects/${projectId}/categories`).then((r) => r.data),
+  createCategory: (projectId: number, name: string) =>
+    client.post<Category>(`/projects/${projectId}/categories`, { name }).then((r) => r.data),
+  updateCategory: (categoryId: number, data: { name?: string; sort_order?: number }) =>
+    client.patch<Category>(`/categories/${categoryId}`, data).then((r) => r.data),
+  deleteCategory: (categoryId: number) =>
+    client.delete(`/categories/${categoryId}`).then((r) => r.data),
+
+  // ---------- 资产 ----------
+  listAssets: (projectId: number, params?: Record<string, unknown>) =>
+    client.get<Asset[]>(`/projects/${projectId}/assets`, { params }).then((r) => r.data),
+  getAsset: (id: number) => client.get<Asset>(`/assets/${id}`).then((r) => r.data),
+  createAsset: (form: FormData) => client.post<Asset>('/assets', form).then((r) => r.data),
+  updateAsset: (id: number, form: FormData) =>
+    client.patch<Asset>(`/assets/${id}`, form).then((r) => r.data),
+  deleteAsset: (id: number) => client.delete(`/assets/${id}`).then((r) => r.data),
+
+  // ---------- 版本 ----------
+  listVersions: (assetId: number) =>
+    client.get<Version[]>(`/assets/${assetId}/versions`).then((r) => r.data),
+  uploadVersion: (assetId: number, form: FormData) =>
+    client.post<Version>(`/assets/${assetId}/versions`, form).then((r) => r.data),
+  deleteVersion: (versionId: number) =>
+    client.delete(`/versions/${versionId}`).then((r) => r.data),
+  downloadStats: (assetId: number) =>
+    client.get<DownloadStats>(`/assets/${assetId}/download-stats`).then((r) => r.data),
+
+  // ---------- 点赞 ----------
+  toggleLike: (assetId: number) =>
+    client.post<{ liked: boolean; like_count: number }>(`/assets/${assetId}/like`).then((r) => r.data),
+
+  // ---------- 资产关联 ----------
+  listRelations: (assetId: number) =>
+    client.get<AssetRelation[]>(`/assets/${assetId}/relations`).then((r) => r.data),
+  addRelation: (assetId: number, toAssetId: number, relationType = 'related') =>
+    client
+      .post(`/assets/${assetId}/relations`, { to_asset_id: toAssetId, relation_type: relationType })
+      .then((r) => r.data),
+  deleteRelation: (relationId: number) =>
+    client.delete(`/relations/${relationId}`).then((r) => r.data),
+
+  // ---------- 评论 ----------
+  listComments: (assetId: number, versionId?: number) =>
+    client
+      .get<Comment[]>(`/assets/${assetId}/comments`, {
+        params: versionId != null ? { version_id: versionId } : {},
+      })
+      .then((r) => r.data),
+  addComment: (assetId: number, content: string, parent_id?: number, version_id?: number) =>
+    client.post<Comment>(`/assets/${assetId}/comments`, { content, parent_id, version_id }).then((r) => r.data),
+  deleteComment: (id: number) => client.delete(`/comments/${id}`).then((r) => r.data),
+
+  // ---------- 订阅 ----------
+  listSubscriptions: () =>
+    client
+      .get<{ id: number; target_type: string; target_id: number }[]>('/subscriptions')
+      .then((r) => r.data),
+  toggleSubscription: (target_type: 'project' | 'asset', target_id: number) =>
+    client
+      .post<{ subscribed: boolean }>('/subscriptions/toggle', { target_type, target_id })
+      .then((r) => r.data),
+
+  // ---------- 消息 ----------
+  listNotifications: (unreadOnly = false) =>
+    client.get<Notification[]>('/notifications', { params: { unread_only: unreadOnly } }).then((r) => r.data),
+  unreadCount: () =>
+    client.get<{ count: number }>('/notifications/unread-count').then((r) => r.data),
+  markRead: (id: number) => client.patch(`/notifications/${id}/read`).then((r) => r.data),
+  markAllRead: () => client.post('/notifications/read-all').then((r) => r.data),
+
+  // ---------- 管理员 ----------
+  listUsers: () => client.get<User[]>('/admin/users').then((r) => r.data),
+  createUser: (data: { username: string; password: string; nickname?: string; role: string }) =>
+    client.post<User>('/admin/users', data).then((r) => r.data),
+  updateUser: (id: number, data: { nickname?: string; role?: string }) =>
+    client.patch<User>(`/admin/users/${id}`, data).then((r) => r.data),
+  setUserStatus: (id: number, status: string) =>
+    client.patch<User>(`/admin/users/${id}/status`, { status }).then((r) => r.data),
+  listAllProjects: (archived = false) =>
+    client.get<Project[]>('/admin/projects', { params: { archived } }).then((r) => r.data),
+}
+
+// 把后端返回的相对路径（如 thumbnails/x.png）转成可访问 URL
+export function uploadUrl(rel?: string | null): string | null {
+  return rel ? `/uploads/${rel}` : null
+}
+
+export function thumbUrl(cover?: string | null): string | null {
+  return uploadUrl(cover)
+}
+
+/** 项目的规范路径：/用户名/项目slug（缺 slug 时回落到 /projects/{id}） */
+export function projectPath(p: {
+  id: number
+  slug?: string | null
+  owner?: UserBrief | null
+}): string {
+  if (p.owner?.username && p.slug) return `/${p.owner.username}/${p.slug}`
+  return `/projects/${p.id}`
+}
+
+export function downloadUrl(versionId: number): string {
+  return `/api/versions/${versionId}/download`
+}
+
+// 带鉴权的下载：用 axios 拉取 blob 再触发浏览器保存
+export async function downloadFile(versionId: number, filename: string) {
+  const res = await client.get(`/versions/${versionId}/download`, { responseType: 'blob' })
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export function formatSize(bytes?: number | null): string {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let n = bytes
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024
+    i++
+  }
+  return `${n.toFixed(1)} ${units[i]}`
+}

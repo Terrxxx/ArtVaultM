@@ -1,0 +1,200 @@
+import random
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Category, Project, ProjectMember, User
+from ..schemas import ProjectCreate, ProjectUpdate
+from ..serializers import project_to_dict
+from ..services.slug import slugify
+from .deps import (
+    ensure_project_access,
+    ensure_project_owner,
+    get_current_user,
+    visible_project_ids,
+)
+
+router = APIRouter()
+
+SYSTEM_CATEGORIES = [
+    "模型",
+    "贴图与材质",
+    "动画",
+    "特效",
+    "音频",
+    "UI与图标",
+    "场景",
+    "概念设计",
+    "其他",
+]
+
+
+def unique_slug(db: Session, owner_id: int, name: str) -> str:
+    """同一所有者的项目 slug 不重复。"""
+    base = slugify(name)
+    slug = base
+    n = 2
+    while (
+        db.query(Project)
+        .filter(Project.owner_id == owner_id, Project.slug == slug)
+        .first()
+        is not None
+    ):
+        slug = f"{base}-{n}"
+        n += 1
+    return slug
+
+
+@router.post("/projects")
+def create_project(
+    payload: ProjectCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = Project(
+        name=payload.name,
+        slug=unique_slug(db, user.id, payload.name),
+        description=payload.description,
+        github_repo_url=payload.github_repo_url,
+        visibility=payload.visibility or "public",
+        owner_id=user.id,
+    )
+    db.add(project)
+    db.flush()
+
+    # 归类方式：默认用系统分类，或使用自定义分类
+    if payload.category_mode == "custom" and payload.custom_categories:
+        names = [n.strip() for n in payload.custom_categories if n and n.strip()]
+    else:
+        names = list(SYSTEM_CATEGORIES)
+
+    for i, name in enumerate(names):
+        db.add(
+            Category(
+                project_id=project.id,
+                name=name,
+                sort_order=i,
+                is_system=(payload.category_mode != "custom"),
+            )
+        )
+
+    db.commit()
+    db.refresh(project)
+    return project_to_dict(project, include_categories=True)
+
+
+@router.get("/projects")
+def list_projects(
+    archived: bool = False,
+    scope: str = "mine",  # mine=我参与的 / public=全部公开
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = db.query(Project).filter(Project.is_archived.is_(bool(archived)))
+
+    if scope == "public":
+        query = query.filter(Project.visibility == "public")
+        projects = query.all()
+        random.shuffle(projects)
+        return [project_to_dict(p) for p in projects]
+
+    if user.role != "admin":
+        joined_ids = [
+            m.project_id
+            for m in db.query(ProjectMember)
+            .filter(
+                ProjectMember.user_id == user.id,
+                ProjectMember.status == "accepted",
+            )
+            .all()
+        ]
+        query = query.filter(
+            (Project.owner_id == user.id) | (Project.id.in_(joined_ids or [0]))
+        )
+
+    projects = query.order_by(Project.created_at.desc()).all()
+    return [project_to_dict(p) for p in projects]
+
+
+@router.get("/projects/public/random")
+def random_public_projects(
+    limit: int = 8,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """主页「发现公开项目」：随机返回公开项目。"""
+    projects = (
+        db.query(Project)
+        .filter(Project.visibility == "public", Project.is_archived.is_(False))
+        .all()
+    )
+    random.shuffle(projects)
+    return [project_to_dict(p) for p in projects[: max(1, min(limit, 50))]]
+
+
+@router.get("/projects/by-slug/{username}/{slug}")
+def get_project_by_slug(
+    username: str,
+    slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    owner = db.query(User).filter(User.username == username).first()
+    if owner is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    project = (
+        db.query(Project)
+        .filter(Project.owner_id == owner.id, Project.slug == slug)
+        .first()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    ensure_project_access(db, project.id, user)
+    return project_to_dict(project, include_categories=True, include_members=True)
+
+
+@router.get("/projects/{project_id}")
+def get_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = ensure_project_access(db, project_id, user)
+    return project_to_dict(project, include_categories=True, include_members=True)
+
+
+@router.patch("/projects/{project_id}")
+def update_project(
+    project_id: int,
+    payload: ProjectUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = ensure_project_owner(db, project_id, user)
+
+    for field in ("name", "description", "github_repo_url", "visibility"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(project, field, value)
+
+    if payload.is_archived is not None:
+        project.is_archived = payload.is_archived
+
+    # slug 不随改名变化，避免已分享的链接失效
+    db.commit()
+    db.refresh(project)
+    return project_to_dict(project, include_categories=True, include_members=True)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = ensure_project_owner(db, project_id, user)
+    db.delete(project)
+    db.commit()
+    return {"ok": True}
