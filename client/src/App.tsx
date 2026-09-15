@@ -73,7 +73,8 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/users/:id" element={<RedirectUserById />} />
-          <Route path="/admin" element={<Admin />} />
+          {/* 管理后台放在 /console：/{用户名} 是个人主页，用 /admin 会被 admin 这个用户名占用 */}
+          <Route path="/console" element={<Admin />} />
           {/* 规范地址：/用户名/项目slug（中文已转拼音） */}
           <Route path="/:username/:slug" element={<ProjectDetailBySlug />} />
           {/* 规范地址：/用户名/项目slug/资产id */}

@@ -69,7 +69,7 @@ export default function Layout() {
           </Link>
           <nav style={{ display: 'flex', gap: 20, fontSize: 15 }}>
             <Link to="/">项目</Link>
-            {isAdmin && <Link to="/admin">管理后台</Link>}
+            {isAdmin && <Link to="/console">管理后台</Link>}
           </nav>
         </Space>
 

@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -21,6 +23,22 @@ router = APIRouter()
 
 VALID_ROLES = (MEMBER, ADMIN, SUPER_ADMIN)
 
+# 个人主页是 /{用户名}，这些是同级的前端静态路由，占用后该用户将无法访问
+RESERVED_USERNAMES = {"login", "settings", "notifications", "console"}
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
+
+
+def _validate_username(username: str) -> None:
+    if not USERNAME_PATTERN.match(username):
+        raise HTTPException(
+            status_code=400,
+            detail="用户名只能包含字母、数字、下划线和短横线，长度 3-32 位",
+        )
+    if username.lower() in RESERVED_USERNAMES:
+        raise HTTPException(
+            status_code=400, detail=f"“{username}” 是系统保留名，请换一个"
+        )
+
 
 @router.post("/users")
 def create_user(
@@ -34,6 +52,8 @@ def create_user(
     # 只有高级管理员能创建管理员
     if role != MEMBER and not is_super_admin(admin):
         raise HTTPException(status_code=403, detail="只有高级管理员可以创建管理员账号")
+
+    _validate_username(payload.username)
 
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
