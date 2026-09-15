@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Empty,
   Input,
   message,
@@ -17,6 +18,7 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined,
+  BarChartOutlined,
   BellOutlined,
   EditOutlined,
   GithubOutlined,
@@ -47,6 +49,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [rankDays, setRankDays] = useState(30)
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
+  const [rankOpen, setRankOpen] = useState(false)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -198,48 +201,26 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               需要项目所有者邀请并同意后，才能上传资产
             </Typography.Text>
           )}
+          <Button icon={<BarChartOutlined />} onClick={() => setRankOpen(true)}>
+            贡献排行
+          </Button>
         </Space>
 
-        <Row gutter={[20, 20]}>
-          {/* 左：项目贡献排行（竖柱） */}
-          <Col xs={24} lg={7} xxl={6}>
-            <Card
-              title="贡献排行"
-              extra={
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  按上传版本数
-                </Typography.Text>
-              }
-            >
-              <Leaderboard
-                items={rankItems}
-                days={rankDays}
-                onDaysChange={setRankDays}
-                loading={rankLoading}
-                emptyText="这段时间还没有贡献"
-              />
-            </Card>
-          </Col>
-
-          {/* 右：资产列表 */}
-          <Col xs={24} lg={17} xxl={18}>
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 60 }}>
-                <Spin />
-              </div>
-            ) : assets.length === 0 ? (
-              <Empty description={q ? '没有匹配的资产' : '暂无资产'} style={{ marginTop: 60 }} />
-            ) : (
-              <Row gutter={[16, 16]}>
-                {assets.map((a) => (
-                  <Col xs={24} sm={12} xl={8} key={a.id}>
-                    <AssetCard asset={a} />
-                  </Col>
-                ))}
-              </Row>
-            )}
-          </Col>
-        </Row>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 60 }}>
+            <Spin />
+          </div>
+        ) : assets.length === 0 ? (
+          <Empty description={q ? '没有匹配的资产' : '暂无资产'} style={{ marginTop: 60 }} />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {assets.map((a) => (
+              <Col xs={24} sm={12} lg={6} key={a.id}>
+                <AssetCard asset={a} />
+              </Col>
+            ))}
+          </Row>
+        )}
 
         <Card title="更新热力图">
           <Heatmap
@@ -258,6 +239,23 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />
+
+      {/* 贡献排行放在左侧抽屉里，不影响主体布局 */}
+      <Drawer
+        title="贡献排行"
+        placement="left"
+        width={340}
+        open={rankOpen}
+        onClose={() => setRankOpen(false)}
+      >
+        <Leaderboard
+          items={rankItems}
+          days={rankDays}
+          onDaysChange={setRankDays}
+          loading={rankLoading}
+          emptyText="这段时间还没有贡献"
+        />
+      </Drawer>
     </div>
   )
 }

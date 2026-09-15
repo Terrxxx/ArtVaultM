@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -20,6 +21,7 @@ import {
   Typography,
 } from 'antd'
 import {
+  BarChartOutlined,
   EditOutlined,
   FolderOutlined,
   GithubOutlined,
@@ -42,6 +44,7 @@ export default function ProjectList() {
   const [rankDays, setRankDays] = useState(30)
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
+  const [rankOpen, setRankOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -194,16 +197,21 @@ export default function ProjectList() {
             ]}
           />
         </Space>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            createForm.setFieldsValue({ visibility: 'public', category_mode: 'default' })
-            setCreateOpen(true)
-          }}
-        >
-          新建项目
-        </Button>
+        <Space>
+          <Button icon={<BarChartOutlined />} onClick={() => setRankOpen(true)}>
+            活跃排行
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              createForm.setFieldsValue({ visibility: 'public', category_mode: 'default' })
+              setCreateOpen(true)
+            }}
+          >
+            新建项目
+          </Button>
+        </Space>
       </div>
 
       {loading ? (
@@ -211,58 +219,50 @@ export default function ProjectList() {
           <Spin size="large" />
         </div>
       ) : (
-        <Row gutter={[20, 20]}>
-          {/* 左：活跃排行（竖柱） */}
-          <Col xs={24} lg={7} xxl={6}>
-            <Card
-              title="活跃排行"
-              extra={
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  按上传版本数
-                </Typography.Text>
-              }
-            >
-              <Leaderboard
-                items={rankItems}
-                days={rankDays}
-                onDaysChange={setRankDays}
-                loading={rankLoading}
+        <Space direction="vertical" size={28} style={{ width: '100%' }}>
+          <div>
+            {mine.length === 0 ? (
+              <Empty
+                description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
+                style={{ marginTop: 24, marginBottom: 24 }}
               />
-            </Card>
-          </Col>
+            ) : (
+              <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
+            )}
+          </div>
 
-          {/* 右：我的项目 + 广场 */}
-          <Col xs={24} lg={17} xxl={18}>
-            <Space direction="vertical" size={28} style={{ width: '100%' }}>
-              <div>
-                {mine.length === 0 ? (
-                  <Empty
-                    description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
-                    style={{ marginTop: 24, marginBottom: 24 }}
-                  />
-                ) : (
-                  <Row gutter={[16, 16]}>{mine.map(renderCard)}</Row>
-                )}
-              </div>
-
-              {plaza.length > 0 && (
-                <div>
-                  <Typography.Title level={5} style={{ marginBottom: 12 }}>
-                    广场
-                    <Typography.Text
-                      type="secondary"
-                      style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
-                    >
-                      按热度推荐公开项目
-                    </Typography.Text>
-                  </Typography.Title>
-                  <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
-                </div>
-              )}
-            </Space>
-          </Col>
-        </Row>
+          {plaza.length > 0 && (
+            <div>
+              <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                广场
+                <Typography.Text
+                  type="secondary"
+                  style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}
+                >
+                  按热度推荐公开项目
+                </Typography.Text>
+              </Typography.Title>
+              <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
+            </div>
+          )}
+        </Space>
       )}
+
+      {/* 活跃排行放在左侧抽屉里，不影响主体布局 */}
+      <Drawer
+        title="活跃排行"
+        placement="left"
+        width={340}
+        open={rankOpen}
+        onClose={() => setRankOpen(false)}
+      >
+        <Leaderboard
+          items={rankItems}
+          days={rankDays}
+          onDaysChange={setRankDays}
+          loading={rankLoading}
+        />
+      </Drawer>
 
       <Modal
         title="新建项目"
