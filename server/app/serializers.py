@@ -23,6 +23,7 @@ def user_out(u: User) -> dict:
         **user_brief(u),
         "role": u.role,
         "status": u.status,
+        "deleted_at": u.deleted_at.isoformat() if u.deleted_at else None,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 

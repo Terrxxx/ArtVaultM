@@ -195,6 +195,8 @@ export const api = {
     client.patch<User>(`/admin/users/${id}`, data).then((r) => r.data),
   setUserStatus: (id: number, status: string) =>
     client.patch<User>(`/admin/users/${id}/status`, { status }).then((r) => r.data),
+  /** 软删除：仅打标记，不真删库 */
+  deleteUser: (id: number) => client.delete<User>(`/admin/users/${id}`).then((r) => r.data),
   listAllProjects: (archived = false) =>
     client.get<AdminProject[]>('/admin/projects', { params: { archived } }).then((r) => r.data),
 

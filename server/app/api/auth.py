@@ -19,6 +19,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=403, detail="该账号已被删除")
     if user.status != "active":
         raise HTTPException(status_code=403, detail="账号已被禁用")
     token = create_access_token(user.id, user.role)

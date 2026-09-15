@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -122,6 +123,34 @@ def set_user_status(
     if not can_manage_target(admin, user):
         raise HTTPException(status_code=403, detail="无权修改该用户（管理员只能管理普通成员）")
     user.status = payload.status
+    db.commit()
+    db.refresh(user)
+    return user_out(user)
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """删除用户——只打软删除标记，不在数据库真删。
+
+    资产、评论等仍引用该用户，真删会破坏历史数据；
+    标记后该账号无法登录、不出现在搜索与成员候选中，个人主页也视为不存在。
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="不能删除自己")
+    if not can_manage_target(admin, user):
+        raise HTTPException(status_code=403, detail="无权删除该用户（管理员只能管理普通成员）")
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="该用户已被删除")
+
+    user.deleted_at = datetime.utcnow()
+    user.status = "disabled"
     db.commit()
     db.refresh(user)
     return user_out(user)

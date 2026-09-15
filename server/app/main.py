@@ -34,6 +34,7 @@ WANTED_COLUMNS = {
     "users": {
         "github_url": "VARCHAR",
         "avatar_storage": "VARCHAR DEFAULT 'local'",
+        "deleted_at": "DATETIME",
     },
     "projects": {
         "is_archived": "BOOLEAN DEFAULT 0",

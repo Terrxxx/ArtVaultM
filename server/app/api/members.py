@@ -44,7 +44,7 @@ def invite_member(
     project = ensure_project_editor(db, project_id, user)
 
     target = db.get(User, payload.user_id)
-    if target is None or target.status != "active":
+    if target is None or target.status != "active" or target.deleted_at is not None:
         raise HTTPException(status_code=404, detail="用户不存在或已被禁用")
     if target.id == project.owner_id:
         raise HTTPException(status_code=400, detail="该用户已是项目所有者")

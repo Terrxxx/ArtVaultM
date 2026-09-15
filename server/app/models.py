@@ -26,6 +26,8 @@ class User(Base):
     github_url = Column(String, nullable=True)
     role = Column(String, default="member")  # admin / member
     status = Column(String, default="active")  # active / disabled
+    # 软删除：只打时间标记，不真的删库（资产/评论等仍引用该用户）
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

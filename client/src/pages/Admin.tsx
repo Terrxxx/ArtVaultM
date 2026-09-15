@@ -63,9 +63,9 @@ function UserManager({ me }: { me: User | null }) {
   const [editForm] = Form.useForm()
   const superAdmin = isSuperAdmin(me?.role)
 
-  /** 管理员只能管普通成员；高级管理员可管所有人（且不能改自己） */
+  /** 管理员只能管普通成员；高级管理员可管所有人（且不能改自己）；已删除的不再可管 */
   const manageable = (u: User) =>
-    superAdmin ? u.id !== me?.id : u.role === 'member'
+    !u.deleted_at && (superAdmin ? u.id !== me?.id : u.role === 'member')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -104,6 +104,16 @@ function UserManager({ me }: { me: User | null }) {
       load()
     } catch (e: any) {
       message.error(e.response?.data?.detail || '操作失败')
+    }
+  }
+
+  const removeUser = async (u: User) => {
+    try {
+      await api.deleteUser(u.id)
+      message.success('已删除（仅在库里打标记，数据保留）')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '删除失败')
     }
   }
 
@@ -153,8 +163,15 @@ function UserManager({ me }: { me: User | null }) {
     {
       title: '状态',
       dataIndex: 'status',
-      width: 100,
-      render: (v: string) => (v === 'active' ? <Tag color="green">正常</Tag> : <Tag color="red">已禁用</Tag>),
+      width: 110,
+      render: (_: string, u: User) =>
+        u.deleted_at ? (
+          <Tag>已删除</Tag>
+        ) : u.status === 'active' ? (
+          <Tag color="green">正常</Tag>
+        ) : (
+          <Tag color="red">已禁用</Tag>
+        ),
     },
     {
       title: '创建时间',
@@ -166,6 +183,13 @@ function UserManager({ me }: { me: User | null }) {
       title: '操作',
       key: 'action',
       render: (_: unknown, u: User) => {
+        if (u.deleted_at) {
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              已删除
+            </Typography.Text>
+          )
+        }
         if (!manageable(u)) {
           return (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -184,6 +208,15 @@ function UserManager({ me }: { me: User | null }) {
               unCheckedChildren="禁用"
               onChange={() => toggleStatus(u)}
             />
+            <Popconfirm
+              title="删除该用户？"
+              description="仅在数据库中打删除标记，资产与评论等历史数据会保留"
+              onConfirm={() => removeUser(u)}
+            >
+              <Button type="link" size="small" danger style={{ padding: 0 }}>
+                删除
+              </Button>
+            </Popconfirm>
           </Space>
         )
       },

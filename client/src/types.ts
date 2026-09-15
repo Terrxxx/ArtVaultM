@@ -11,6 +11,8 @@ export interface UserBrief {
 export interface User extends UserBrief {
   role: string
   status: string
+  /** 非空表示已软删除（记录仍在库中） */
+  deleted_at?: string | null
   created_at: string
 }
 

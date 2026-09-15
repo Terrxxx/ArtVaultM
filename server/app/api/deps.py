@@ -28,11 +28,16 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已失效，请重新登录"
         )
     user = db.get(User, int(payload.get("sub")))
-    if user is None or user.status != "active":
+    if user is None or user.status != "active" or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在或已被禁用"
         )
     return user
+
+
+def is_deleted(user: User) -> bool:
+    """软删除标记（只打标记，记录仍在库里）。"""
+    return user.deleted_at is not None
 
 
 def is_super_admin(user: User) -> bool:

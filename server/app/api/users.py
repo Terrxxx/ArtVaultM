@@ -17,14 +17,24 @@ def search_users(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """按昵称或用户名模糊查询用户，用于项目邀请。"""
-    query = db.query(User).filter(User.status == "active")
+    """按昵称或用户名模糊查询用户，用于项目邀请。已删除的账号不出现。"""
+    query = db.query(User).filter(
+        User.status == "active", User.deleted_at.is_(None)
+    )
     keyword = q.strip()
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(User.nickname.ilike(like) | User.username.ilike(like))
     users = query.order_by(User.id).limit(min(limit, 50)).all()
     return [user_brief(u) for u in users]
+
+
+def _get_active_user(db: Session, **filters) -> User:
+    """按条件取用户；已软删除的视为不存在。"""
+    target = db.query(User).filter_by(**filters).first()
+    if target is None or target.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return target
 
 
 def _profile_payload(db: Session, target: User, viewer: User) -> dict:
@@ -75,9 +85,7 @@ def user_activity_by_username(
     user: User = Depends(get_current_user),
 ):
     """个人更新热力图：按天统计该用户上传的版本数。"""
-    target = db.query(User).filter(User.username == username).first()
-    if target is None:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    target = _get_active_user(db, username=username)
     return {
         "days": days,
         "items": stats.daily_version_counts(db, days=days, user_id=target.id),
@@ -91,9 +99,7 @@ def get_user_profile_by_username(
     user: User = Depends(get_current_user),
 ):
     """个人主页按用户名访问（前端路由 /{用户名}）。"""
-    target = db.query(User).filter(User.username == username).first()
-    if target is None:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    target = _get_active_user(db, username=username)
     return _profile_payload(db, target, user)
 
 
@@ -104,6 +110,6 @@ def get_user_profile(
     user: User = Depends(get_current_user),
 ):
     target = db.get(User, user_id)
-    if target is None:
+    if target is None or target.deleted_at is not None:
         raise HTTPException(status_code=404, detail="用户不存在")
     return _profile_payload(db, target, user)

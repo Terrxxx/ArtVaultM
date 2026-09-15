@@ -175,7 +175,7 @@ cd server
 | 评论 | `GET/POST /assets/{id}/comments`（`version_id` 筛选）· `DELETE /comments/{id}` |
 | 订阅 | `GET /subscriptions` · `POST /subscriptions/toggle` |
 | 消息 | `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/{id}/read` · `POST /notifications/read-all` |
-| 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `GET /admin/projects`（含私有，带 `can_edit`） |
+| 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `DELETE /admin/users/{id}`（软删除）· `GET /admin/projects`（含私有，带 `can_edit`） |
 | 对象存储 | `GET/PUT /admin/storage-config` · `POST /admin/storage-config/test`（仅高级管理员） |
 
 ## 在线预览与下载
@@ -208,3 +208,19 @@ COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模�
 项目未使用 Alembic。新表由 `Base.metadata.create_all` 自动创建；已存在的表新增列由
 [main.py](server/app/main.py) 的 `ensure_columns()` 在启动时幂等 `ALTER TABLE` 补齐，
 历史项目缺少的 slug 由 `backfill_slugs()` 按拼音补全。
+
+## 删除用户是软删除
+
+`DELETE /admin/users/{id}` **不会真的删库**，只在 `users.deleted_at` 打一个时间戳
+（同时把 `status` 置为 `disabled`）。原因是资产、评论、版本等都外键引用用户，
+真删会破坏历史数据的可读性。
+
+标记后的效果：
+
+- 无法登录（提示「该账号已被删除」）
+- 不出现在用户搜索与项目成员候选里
+- 个人主页 `/{用户名}` 视为不存在（404）
+- 历史数据里仍能看到他上传的资产、评论等（名字与头像照常显示）
+- 管理后台的用户列表仍会列出，状态显示「已删除」且不再提供操作
+
+需要恢复的话，把 `deleted_at` 置空即可（目前没有做恢复入口，按需再加）。
