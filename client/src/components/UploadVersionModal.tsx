@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Form, Input, Modal, Upload, message } from 'antd'
+import { Form, Input, Modal, Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
 
@@ -21,7 +21,6 @@ export default function UploadVersionModal({ open, assetId, onClose, onSuccess }
     const fd = new FormData()
     fd.append('file', values.file[0].originFileObj)
     if (values.changelog) fd.append('changelog', values.changelog)
-    if (values.thumbnail?.[0]?.originFileObj) fd.append('thumbnail', values.thumbnail[0].originFileObj)
 
     setSubmitting(true)
     try {
@@ -56,11 +55,6 @@ export default function UploadVersionModal({ open, assetId, onClose, onSuccess }
         </Form.Item>
         <Form.Item name="changelog" label="版本说明">
           <Input.TextArea rows={2} placeholder="这一版改了什么" />
-        </Form.Item>
-        <Form.Item name="thumbnail" label="缩略图（可选）" valuePropName="fileList" getValueFromEvent={normFile}>
-          <Upload beforeUpload={() => false} maxCount={1} listType="picture">
-            <Button>选择图片</Button>
-          </Upload>
         </Form.Item>
       </Form>
     </Modal>
