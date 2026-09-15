@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ArtVault API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="ArtVault API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
