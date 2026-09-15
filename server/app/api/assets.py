@@ -150,8 +150,17 @@ def create_asset(
         deduped = False
 
     raw_thumb, thumb_name = storage.read_upload(thumbnail)
+    try:
+        storage.ensure_image_size(raw_thumb)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     cover = storage.save_asset_cover(asset.id, raw_thumb, thumb_name, cos)
     version_thumb = storage.save_version_thumbnail(asset.id, 1, raw_thumb, thumb_name, cos)
+    # 版本自己的 42×42 小图：文件本身就是图片时直接从文件派生（不用重复上传）
+    version_small = storage.store_version_small(
+        asset.id, 1, storage.derive_small(file_bytes), cos
+    )
 
     # 没单独传封面时，若资产文件本身就是图片，直接拿它派生封面（不必重复上传）
     if not cover["main"]["path"] and file_bytes:
@@ -169,6 +178,8 @@ def create_asset(
             changelog=changelog,
             thumbnail=version_thumb["path"],
             thumbnail_storage=version_thumb["storage"],
+            thumb_small=version_small["path"],
+            thumb_small_storage=version_small["storage"],
             storage=placed["storage"],
             file_path=placed["file_path"],
             file_name=staged["file_name"],

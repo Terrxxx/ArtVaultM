@@ -92,6 +92,12 @@ def upload_version(
 
     cos = storage_config.cos_params(db)
     staged = storage.stage_upload(file)
+    # 图片版本要用文件本身派生 42×42 小图，且临时文件稍后会被移走，这里先读出来
+    file_bytes = (
+        staged["tmp_path"].read_bytes()
+        if staged["file_format"] in storage.DERIVABLE_FORMATS
+        else None
+    )
     reuse = _find_reusable_version(
         db, asset.project_id, staged["file_hash"], _target_storage(cos), cos
     )
@@ -112,8 +118,17 @@ def upload_version(
 
     # 每个版本可以有自己的一张预览缩略图
     raw_thumb, thumb_name = storage.read_upload(thumbnail)
+    try:
+        storage.ensure_image_size(raw_thumb)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     version_thumb = storage.save_version_thumbnail(
         asset.id, next_version, raw_thumb, thumb_name, cos
+    )
+    # 版本自己的 42×42 小图：文件本身就是图片时直接从文件派生（不用重复上传）
+    version_small = storage.store_version_small(
+        asset.id, next_version, storage.derive_small(file_bytes), cos
     )
 
     version = AssetVersion(
@@ -123,6 +138,8 @@ def upload_version(
         changelog=changelog,
         thumbnail=version_thumb["path"],
         thumbnail_storage=version_thumb["storage"],
+        thumb_small=version_small["path"],
+        thumb_small_storage=version_small["storage"],
         storage=placed["storage"],
         file_path=placed["file_path"],
         file_name=staged["file_name"],

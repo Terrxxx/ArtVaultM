@@ -26,6 +26,8 @@ export interface Version {
   file_hash?: string | null
   thumbnail?: string | null
   thumbnail_url?: string | null
+  /** 该版本的 42×42 小图（图片版本才有，由版本文件派生） */
+  thumb_small_url?: string | null
   changelog?: string | null
   is_latest: boolean
   download_count: number

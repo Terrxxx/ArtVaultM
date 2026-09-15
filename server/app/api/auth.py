@@ -47,6 +47,10 @@ def update_profile(
     if avatar is not None and avatar.filename:
         cos = storage_config.cos_params(db)
         raw, name = storage.read_upload(avatar)
+        try:
+            storage.ensure_image_size(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         saved = storage.save_avatar(user.id, raw, name, cos)
         if saved["path"]:
             # 换头像时清掉旧的，避免堆积

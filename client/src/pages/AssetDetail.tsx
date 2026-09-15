@@ -84,10 +84,8 @@ export default function AssetDetail() {
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
 
-  // 只有图片类资产才在版本列表里显示缩略图，且用的是资产级 42×42 小图
-  const latestFormat = asset.latest_version?.file_format
-  const isImageAsset = previewKind(latestFormat) === 'image'
-  const rowThumb = isImageAsset ? asset.small_thumbnail_url || null : null
+  // 版本列表的缩略图来自该版本自己的文件（只有图片版本有）
+  const rowThumbOf = (v: Version) => v.thumb_small_url || null
 
   const toggleLike = async () => {
     const res = await api.toggleLike(assetId)
@@ -231,7 +229,9 @@ export default function AssetDetail() {
           >
             <List
               dataSource={visibleVersions}
-              renderItem={(v: Version) => (
+              renderItem={(v: Version) => {
+                const rowThumb = rowThumbOf(v)
+                return (
                 <List.Item
                   actions={[
                     <Button
@@ -307,7 +307,8 @@ export default function AssetDetail() {
                     }
                   />
                 </List.Item>
-              )}
+                )
+              }}
             />
           </div>
         </Card>

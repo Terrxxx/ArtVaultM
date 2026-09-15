@@ -13,12 +13,18 @@ from . import storage_config
 
 CHUNK = 1024 * 1024
 
-# 主缩略图：最长边 512，压到 10KB 以内
+# 作为封面/缩略图/头像上传的图片大小上限
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+# 封面：只转格式不做压缩（保持原始尺寸，WebP 高质量）
+COVER_QUALITY = 95
+
+# 版本缩略图：最长边 512，压到 10KB 以内
 THUMB_MAX_EDGE = 512
 THUMB_TARGET_BYTES = 10 * 1024
 THUMB_QUALITIES = (82, 74, 66, 58, 50, 42, 34, 26, 20)
 
-# 版本列表等紧凑场景用的资产小图
+# 版本列表等紧凑场景用的小图
 SMALL_THUMB_EDGE = 42
 SMALL_THUMB_TARGET_BYTES = 3 * 1024
 SMALL_QUALITIES = (70, 60, 50, 40, 30)
@@ -78,23 +84,41 @@ def _load_image(raw: bytes):
         return None
 
 
-def _encode_webp(img, max_edge: int, target_bytes: int, qualities) -> bytes:
-    """按质量迭代编码；仍超标就把最长边减半再来一轮。"""
+def _encode_webp(
+    img, max_edge: Optional[int], target_bytes: Optional[int], qualities
+) -> bytes:
+    """编码 WebP。
+
+    max_edge 为 None 表示不缩放（封面走这条路：只转格式，不压缩）；
+    否则按质量迭代，仍超标就把最长边减半再来一轮。
+    """
     from PIL import Image  # noqa: F401
 
-    edge = max_edge
-    best = None
-    while edge >= 24:
-        candidate = img.copy()
-        candidate.thumbnail((edge, edge))
+    def encode(candidate):
+        best = None
         for quality in qualities:
             buf = io.BytesIO()
             candidate.save(buf, format="WEBP", quality=quality, method=4)
             data = buf.getvalue()
             if best is None or len(data) < len(best):
                 best = data
-            if len(data) <= target_bytes:
-                return data
+            if target_bytes is not None and len(data) <= target_bytes:
+                break
+        return best
+
+    if max_edge is None:
+        return encode(img)
+
+    edge = max_edge
+    best = None
+    while edge >= 24:
+        candidate = img.copy()
+        candidate.thumbnail((edge, edge))
+        data = encode(candidate)
+        if best is None or (data is not None and len(data) < len(best)):
+            best = data
+        if target_bytes is not None and data is not None and len(data) <= target_bytes:
+            return data
         edge //= 2
     return best
 
@@ -195,6 +219,58 @@ def derive_cover_from_file(
     return save_asset_cover(asset_id, raw, filename, cos)
 
 
+def prepare_cover(raw: bytes) -> dict:
+    """封面：保持原始尺寸转成 WebP（不做压缩），另派生 42×42 小图。"""
+    if not raw:
+        return {"main": None, "small": None, "raw": False}
+
+    img = _load_image(raw)
+    if img is None:
+        return {"main": raw, "small": None, "raw": True}
+
+    return {
+        "main": _encode_webp(img, None, None, (COVER_QUALITY,)),
+        "small": _encode_webp(
+            _square(img, SMALL_THUMB_EDGE),
+            SMALL_THUMB_EDGE,
+            SMALL_THUMB_TARGET_BYTES,
+            SMALL_QUALITIES,
+        ),
+        "raw": False,
+    }
+
+
+def derive_small(raw: Optional[bytes]) -> Optional[bytes]:
+    """从图片派生出 42×42 小图；不是可解码的图片就返回 None。"""
+    if not raw:
+        return None
+    img = _load_image(raw)
+    if img is None:
+        return None
+    return _encode_webp(
+        _square(img, SMALL_THUMB_EDGE),
+        SMALL_THUMB_EDGE,
+        SMALL_THUMB_TARGET_BYTES,
+        SMALL_QUALITIES,
+    )
+
+
+def store_version_small(
+    asset_id: int, version: int, data: Optional[bytes], cos: Optional[dict] = None
+) -> dict:
+    """保存某个版本的 42×42 小图（由该版本的文件派生），返回 {path, storage}。"""
+    if not data:
+        return _empty_slot()
+    key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}_s42"
+    return _store_image(data, key, cos)
+
+
+def ensure_image_size(raw: Optional[bytes]) -> None:
+    """上传的图片超过上限时抛 ValueError（由接口层转成 400）。"""
+    if raw and len(raw) > MAX_IMAGE_BYTES:
+        raise ValueError(f"图片不能超过 {MAX_IMAGE_BYTES // (1024 * 1024)}MB")
+
+
 def save_asset_cover(
     asset_id: int,
     raw: Optional[bytes],
@@ -209,7 +285,7 @@ def save_asset_cover(
     if not raw or not filename:
         return {"main": _empty_slot(), "small": _empty_slot()}
 
-    prepared = prepare_thumbnails(raw)
+    prepared = prepare_cover(raw)
     stem = f"thumbnails/asset{asset_id}_{uuid.uuid4().hex[:8]}"
 
     if prepared["raw"]:
