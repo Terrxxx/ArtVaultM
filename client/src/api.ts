@@ -86,6 +86,8 @@ export const api = {
   searchUsers: (q: string) =>
     client.get<UserBrief[]>('/users/search', { params: { q } }).then((r) => r.data),
   getUserProfile: (id: number) => client.get<UserProfile>(`/users/${id}`).then((r) => r.data),
+  getUserProfileByUsername: (username: string) =>
+    client.get<UserProfile>(`/users/by-username/${username}`).then((r) => r.data),
 
   // ---------- 分类 ----------
   listCategories: (projectId: number) =>
@@ -217,6 +219,11 @@ export function projectPath(p: {
 }): string {
   if (p.owner?.username && p.slug) return `/${p.owner.username}/${p.slug}`
   return `/projects/${p.id}`
+}
+
+/** 用户主页路径：/用户名 */
+export function userPath(u?: { username?: string | null } | null): string {
+  return u?.username ? `/${u.username}` : '/'
 }
 
 /** 资产的规范路径：/用户名/项目slug/资产id */

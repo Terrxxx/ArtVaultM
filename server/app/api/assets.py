@@ -142,7 +142,7 @@ def create_asset(
         )
         deduped = False
 
-    thumb = storage.save_version_thumbnail(asset.id, 1, thumbnail, cos)
+    thumbs = storage.save_version_thumbnails(asset.id, 1, thumbnail, cos)
 
     db.add(
         AssetVersion(
@@ -150,8 +150,10 @@ def create_asset(
             version=1,
             is_latest=True,
             changelog=changelog,
-            thumbnail=thumb["path"],
-            thumbnail_storage=thumb["storage"],
+            thumbnail=thumbs["main"]["path"],
+            thumbnail_storage=thumbs["main"]["storage"],
+            thumb_small=thumbs["small"]["path"],
+            thumb_small_storage=thumbs["small"]["storage"],
             storage=placed["storage"],
             file_path=placed["file_path"],
             file_name=staged["file_name"],
@@ -161,7 +163,7 @@ def create_asset(
             uploader_id=user.id,
         )
     )
-    asset.cover_thumbnail = thumb["path"]
+    asset.cover_thumbnail = thumbs["main"]["path"]
 
     notify.notify_subscribers(
         db,
@@ -227,16 +229,23 @@ def update_asset(
     # 换封面图：同时更新最新版本的缩略图，保证版本历史显示一致
     if thumbnail is not None and thumbnail.filename:
         cos = storage_config.cos_params(db)
-        new_thumb = storage.save_version_thumbnail(
-            asset.id, asset.versions[0].version if asset.versions else 1, thumbnail, cos
+        latest = asset.versions[0] if asset.versions else None
+        new_thumbs = storage.save_version_thumbnails(
+            asset.id, latest.version if latest else 1, thumbnail, cos
         )
-        if new_thumb["path"]:
-            if asset.versions:
-                latest = asset.versions[0]
-                storage.delete_file(latest.thumbnail, latest.thumbnail_storage or "local", cos)
-                latest.thumbnail = new_thumb["path"]
-                latest.thumbnail_storage = new_thumb["storage"]
-            asset.cover_thumbnail = new_thumb["path"]
+        if new_thumbs["main"]["path"]:
+            if latest:
+                storage.delete_file(
+                    latest.thumbnail, latest.thumbnail_storage or "local", cos
+                )
+                storage.delete_file(
+                    latest.thumb_small, latest.thumb_small_storage or "local", cos
+                )
+                latest.thumbnail = new_thumbs["main"]["path"]
+                latest.thumbnail_storage = new_thumbs["main"]["storage"]
+                latest.thumb_small = new_thumbs["small"]["path"]
+                latest.thumb_small_storage = new_thumbs["small"]["storage"]
+            asset.cover_thumbnail = new_thumbs["main"]["path"]
 
     db.commit()
     db.refresh(asset)
@@ -269,6 +278,7 @@ def delete_asset(
 
     for v in asset.versions:
         storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
+        storage.delete_file(v.thumb_small, v.thumb_small_storage or "local", cos)
         if v.storage == "cos":
             storage.delete_file(v.file_path, "cos", cos)
     storage.delete_asset_dir(project_id, asset_id)

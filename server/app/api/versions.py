@@ -110,16 +110,18 @@ def upload_version(
         )
         deduped = False
 
-    # 每个版本独立保存自己的缩略图
-    thumb = storage.save_version_thumbnail(asset.id, next_version, thumbnail, cos)
+    # 每个版本独立保存自己的缩略图（主图 + 版本列表用的 56×56 小图）
+    thumbs = storage.save_version_thumbnails(asset.id, next_version, thumbnail, cos)
 
     version = AssetVersion(
         asset_id=asset.id,
         version=next_version,
         is_latest=True,
         changelog=changelog,
-        thumbnail=thumb["path"],
-        thumbnail_storage=thumb["storage"],
+        thumbnail=thumbs["main"]["path"],
+        thumbnail_storage=thumbs["main"]["storage"],
+        thumb_small=thumbs["small"]["path"],
+        thumb_small_storage=thumbs["small"]["storage"],
         storage=placed["storage"],
         file_path=placed["file_path"],
         file_name=staged["file_name"],
@@ -131,8 +133,8 @@ def upload_version(
     db.add(version)
 
     # 新版本上传了缩略图才替换资产封面，否则保留原封面
-    if thumb["path"]:
-        asset.cover_thumbnail = thumb["path"]
+    if thumbs["main"]["path"]:
+        asset.cover_thumbnail = thumbs["main"]["path"]
 
     summary = f"资产「{asset.name}」发布新版本 v{next_version}"
     # 同时订阅了项目和该资产的用户只发一条，避免重复
@@ -309,13 +311,11 @@ def delete_version(
     db.query(Comment).filter(Comment.version_id == version_id).update(
         {Comment.version_id: None}
     )
-    storage.delete_file(
-        version.thumbnail,
-        version.thumbnail_storage or "local",
-        storage_config.cos_params(db),
-    )
+    cos = storage_config.cos_params(db)
+    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
+    storage.delete_file(version.thumb_small, version.thumb_small_storage or "local", cos)
     if version.storage == "cos":
-        storage.delete_file(version.file_path, "cos", storage_config.cos_params(db))
+        storage.delete_file(version.file_path, "cos", cos)
 
     db.delete(version)
     db.commit()

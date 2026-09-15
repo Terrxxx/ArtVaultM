@@ -24,7 +24,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, projectPath } from '../api'
+import { api, projectPath, userPath } from '../api'
 import type { Asset, Category, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
@@ -104,7 +104,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             </a>
           )}
           {project.owner && (
-            <Link to={`/users/${project.owner.id}`}>
+            <Link to={userPath(project.owner)}>
               <Space size={6} align="center">
                 <Avatar
                   size={22}

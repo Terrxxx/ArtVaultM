@@ -46,6 +46,8 @@ WANTED_COLUMNS = {
         "file_hash": "VARCHAR",
         "thumbnail": "VARCHAR",
         "thumbnail_storage": "VARCHAR DEFAULT 'local'",
+        "thumb_small": "VARCHAR",
+        "thumb_small_storage": "VARCHAR DEFAULT 'local'",
         "storage": "VARCHAR DEFAULT 'local'",
     },
     "comments": {

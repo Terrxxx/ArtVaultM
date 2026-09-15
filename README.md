@@ -96,13 +96,14 @@ cd server
 - ✅ 资产点赞、用户个人资料页（含 GitHub 主页）
 - ✅ 上传文件 SHA256 哈希去重（同项目内同内容复用物理文件）
 - ✅ 独立的**项目编辑页**与**资产编辑页**（资产关联为只读展示）
-- ✅ 项目地址 `/{用户名}/{slug}`（中文转拼音）、资产地址 `/{用户名}/{slug}/{id}`
+- ✅ 项目地址 `/{用户名}/{slug}`（中文转拼音）、资产地址 `/{用户名}/{slug}/{id}`、用户主页 `/{用户名}`
 - ✅ 三级角色：成员 / 管理员 / **高级管理员**
 - ✅ **在线预览**：图片、视频、音频、3D 模型（.gltf/.glb，three.js 旋转查看，单独分包按需加载）
 - ✅ **腾讯云 COS 对象存储**：高级管理员在后台配置后，**资产文件、缩略图、头像**全部上传到桶内
   （`artvaultm/projects/…`、`artvaultm/thumbnails/…`、`artvaultm/avatars/…`）；
   下载与预览均签发临时链接，临时链接可设置 `Content-Disposition` 直接以附件下载
-- ✅ **缩略图与头像自动压缩**：统一转成 WebP 并压到 10KB 以内（按质量迭代，必要时再缩尺寸）
+- ✅ **两档缩略图**：主图（最长边 512、<10KB WebP）用于预览与卡片；
+  另有 **56×56 正方形小图**（约 0.4KB）专供版本历史这类列表，省流量也省内存
 - ✅ 项目卡片与详情展示**创建者头像与主页链接**；评论、版本、上传者、成员、后台用户列表等
   所有出现用户的地方都带头像
 - ✅ 下载改为**浏览器原生直链**（不再用 XHR 取 blob），避免跨域访问 COS 被 CORS 拦截，大文件也不占内存
@@ -126,7 +127,7 @@ cd server
 | 分组 | 主要接口 |
 |---|---|
 | 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
-| 用户 | `GET /users/search?q=` · `GET /users/{id}`（个人资料） |
+| 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `GET /users/{id}` |
 | 项目 | `POST/GET /projects` · `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
@@ -158,8 +159,15 @@ COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模�
 
 ## 图片处理
 
-上传的缩略图与头像统一由 Pillow 转成 **WebP 并压到 10KB 以内**：先按质量 82→20 迭代编码，
-仍超标则把最长边减半再来一轮。
+上传的图片统一由 Pillow 处理，一次读取产出两档：
+
+| 用途 | 规格 |
+|---|---|
+| 主缩略图（预览、卡片、头像） | 最长边 512，WebP，压到 **10KB** 以内 |
+| 版本列表小图 | 居中裁成正方形后缩到 **56×56**，WebP，约 0.4KB |
+
+压缩策略：先按质量 82→20 迭代编码，仍超标就把最长边减半再来一轮。
+非图片文件不做处理，原样保存且不生成小图。
 
 ## 数据库迁移
 

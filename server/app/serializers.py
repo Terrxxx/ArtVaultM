@@ -38,6 +38,10 @@ def version_to_dict(v: AssetVersion) -> dict:
         "file_hash": v.file_hash,
         "thumbnail": v.thumbnail,
         "thumbnail_url": storage.display_url(v.thumbnail, v.thumbnail_storage or "local"),
+        "thumb_small": v.thumb_small,
+        "thumb_small_url": storage.display_url(
+            v.thumb_small, v.thumb_small_storage or "local"
+        ),
         "changelog": v.changelog,
         "is_latest": v.is_latest,
         "download_count": len(v.downloads),

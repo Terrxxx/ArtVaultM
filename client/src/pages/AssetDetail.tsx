@@ -25,7 +25,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, downloadVersion, formatSize } from '../api'
+import { api, downloadVersion, formatSize, userPath } from '../api'
 import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
@@ -161,7 +161,7 @@ export default function AssetDetail() {
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="上传者">
                   {asset.creator ? (
-                    <Link to={`/users/${asset.creator.id}`}>
+                    <Link to={userPath(asset.creator)}>
                       <Space size={6}>
                         <Avatar
                           size={20}
@@ -232,7 +232,7 @@ export default function AssetDetail() {
             <List
               dataSource={visibleVersions}
               renderItem={(v: Version) => {
-                const thumb = v.thumbnail_url || null
+                const thumb = v.thumb_small_url || v.thumbnail_url || null
                 const active = current?.id === v.id
                 return (
                   <List.Item
@@ -302,7 +302,7 @@ export default function AssetDetail() {
                           )}
                           <Space size={6} align="center" style={{ fontSize: 12 }}>
                             {v.uploader ? (
-                              <Link to={`/users/${v.uploader.id}`}>
+                              <Link to={userPath(v.uploader)}>
                                 <Space size={6} align="center">
                                   <Avatar
                                     size={18}

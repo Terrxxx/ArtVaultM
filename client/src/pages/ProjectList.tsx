@@ -28,7 +28,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, projectPath } from '../api'
+import { api, projectPath, userPath } from '../api'
 import type { Project } from '../types'
 import { useAuthStore } from '../store'
 
@@ -122,7 +122,7 @@ export default function ProjectList() {
             {p.description || '暂无描述'}
           </Typography.Text>
           {p.owner && (
-            <Link to={`/users/${p.owner.id}`} onClick={(e) => e.stopPropagation()}>
+            <Link to={userPath(p.owner)} onClick={(e) => e.stopPropagation()}>
               <Space size={6} align="center">
                 <Avatar
                   size={20}

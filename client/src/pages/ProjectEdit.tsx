@@ -26,7 +26,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, projectPath } from '../api'
+import { api, projectPath, userPath } from '../api'
 import type { Category, Project, ProjectMember, UserBrief } from '../types'
 import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
@@ -392,7 +392,7 @@ function MemberManager({
     >
       <List.Item.Meta
         avatar={<Avatar size="small" icon={<UserOutlined />} src={m.user?.avatar_url || undefined} />}
-        title={<Link to={`/users/${m.user?.id}`}>{m.user?.nickname || m.user?.username}</Link>}
+        title={<Link to={userPath(m.user)}>{m.user?.nickname || m.user?.username}</Link>}
         description={`@${m.user?.username}`}
       />
     </List.Item>

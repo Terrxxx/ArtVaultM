@@ -13,10 +13,15 @@ from . import storage_config
 
 CHUNK = 1024 * 1024
 
-# 缩略图压缩目标
+# 主缩略图：最长边 512，压到 10KB 以内
 THUMB_MAX_EDGE = 512
-THUMB_TARGET_BYTES = 10 * 1024  # 10KB
+THUMB_TARGET_BYTES = 10 * 1024
 THUMB_QUALITIES = (82, 74, 66, 58, 50, 42, 34, 26, 20)
+
+# 版本列表用的小图：固定 56x56 正方形，尽量压小
+SMALL_THUMB_EDGE = 56
+SMALL_THUMB_TARGET_BYTES = 4 * 1024
+SMALL_QUALITIES = (70, 60, 50, 40, 30)
 
 # 图片展示链接的有效期（头像/缩略图会随页面一起加载）
 DISPLAY_URL_TTL = 6 * 3600
@@ -58,6 +63,80 @@ def stage_upload(file: UploadFile) -> dict:
     }
 
 
+# ---------- 图片处理 ----------
+
+
+def _load_image(raw: bytes):
+    """解码成 RGB/RGBA，失败返回 None（非图片）。"""
+    try:
+        from PIL import Image, ImageOps
+
+        img = Image.open(io.BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _encode_webp(img, max_edge: int, target_bytes: int, qualities) -> bytes:
+    """按质量迭代编码；仍超标就把最长边减半再来一轮。"""
+    from PIL import Image  # noqa: F401
+
+    edge = max_edge
+    best = None
+    while edge >= 24:
+        candidate = img.copy()
+        candidate.thumbnail((edge, edge))
+        for quality in qualities:
+            buf = io.BytesIO()
+            candidate.save(buf, format="WEBP", quality=quality, method=4)
+            data = buf.getvalue()
+            if best is None or len(data) < len(best):
+                best = data
+            if len(data) <= target_bytes:
+                return data
+        edge //= 2
+    return best
+
+
+def _square(img, size: int):
+    """居中裁成正方形再缩放到 size×size（版本列表按 1:1 展示）。"""
+    from PIL import Image
+
+    w, h = img.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top = (h - side) // 2
+    cropped = img.crop((left, top, left + side, top + side)) if side else img
+    return cropped.resize((size, size), Image.LANCZOS)
+
+
+def prepare_thumbnails(file: UploadFile) -> dict:
+    """只读一次上传流，产出主图与 56×56 小图。
+
+    返回 {"main": bytes|None, "small": bytes|None, "raw": bool}
+    raw=True 表示不是可解码的图片，main 里是原始字节、small 为 None。
+    """
+    raw = file.file.read()
+    if not raw:
+        return {"main": None, "small": None, "raw": False}
+
+    img = _load_image(raw)
+    if img is None:
+        return {"main": raw, "small": None, "raw": True}
+
+    return {
+        "main": _encode_webp(img, THUMB_MAX_EDGE, THUMB_TARGET_BYTES, THUMB_QUALITIES),
+        "small": _encode_webp(
+            _square(img, SMALL_THUMB_EDGE),
+            SMALL_THUMB_EDGE,
+            SMALL_THUMB_TARGET_BYTES,
+            SMALL_QUALITIES,
+        ),
+        "raw": False,
+    }
+
+
 def _put_bytes(data: bytes, key: str, content_type: str, cos: Optional[dict]) -> str:
     """把内存中的字节写入 COS 或本地，返回存储路径。"""
     if cos:
@@ -73,81 +152,75 @@ def _put_bytes(data: bytes, key: str, content_type: str, cos: Optional[dict]) ->
     return key
 
 
-def compress_to_webp(file: UploadFile) -> Optional[bytes]:
-    """把上传的图片压缩成 <10KB 的 webp；无法处理时返回 None（回落到原图）。"""
-    try:
-        from PIL import Image, ImageOps
-
-        raw = file.file.read()
-        if not raw:
-            return None
-        img = Image.open(io.BytesIO(raw))
-        img = ImageOps.exif_transpose(img)
-        img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
-
-        edge = THUMB_MAX_EDGE
-        best = None
-        # 先在质量维度压，仍超标就缩小尺寸再来一轮
-        while edge >= 96:
-            candidate = img.copy()
-            candidate.thumbnail((edge, edge))
-            for quality in THUMB_QUALITIES:
-                buf = io.BytesIO()
-                candidate.save(buf, format="WEBP", quality=quality, method=4)
-                data = buf.getvalue()
-                if best is None or len(data) < len(best):
-                    best = data
-                if len(data) <= THUMB_TARGET_BYTES:
-                    return data
-            edge //= 2
-        return best
-    except Exception:  # noqa: BLE001 - 非图片或解码失败时不改写
-        return None
+def _empty_slot() -> dict:
+    return {"path": None, "storage": "local"}
 
 
-def save_version_thumbnail(
+def _store_image(
+    data: Optional[bytes], key_base: str, file: UploadFile, cos: Optional[dict]
+) -> dict:
+    """把图片字节落库；无数据返回空槽。"""
+    if not data:
+        return _empty_slot()
+    return {
+        "path": _put_bytes(data, f"{key_base}.webp", "image/webp", cos),
+        "storage": "cos" if cos else "local",
+    }
+
+
+def save_version_thumbnails(
     asset_id: int, version: int, file: Optional[UploadFile], cos: Optional[dict] = None
 ) -> dict:
-    """保存某个版本的缩略图（压缩为 webp），返回 {path, storage}。"""
-    empty = {"path": None, "storage": "local"}
+    """保存某个版本的主缩略图与 56×56 小图。
+
+    返回 {"main": {path, storage}, "small": {path, storage}}
+    """
     if file is None or not file.filename:
-        return empty
+        return {"main": _empty_slot(), "small": _empty_slot()}
 
-    key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}.webp"
-    data = compress_to_webp(file)
-    if data is None:
-        # 压缩失败（非图片等）→ 原样保存，但保持同一个 key 约定
-        raw = file.file.read()
-        if not raw:
-            return empty
+    prepared = prepare_thumbnails(file)
+    stem = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}"
+
+    if prepared["raw"]:
+        # 非图片：主图原样存（保留原扩展名），不生成 1:1 小图
         ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
-        key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}{ext}"
-        stored = _put_bytes(raw, key, "application/octet-stream", cos)
-    else:
-        stored = _put_bytes(data, key, "image/webp", cos)
+        stored = _put_bytes(
+            prepared["main"], f"{stem}{ext}", "application/octet-stream", cos
+        )
+        return {
+            "main": {"path": stored, "storage": "cos" if cos else "local"},
+            "small": _empty_slot(),
+        }
 
-    return {"path": stored, "storage": "cos" if cos else "local"}
+    return {
+        "main": _store_image(prepared["main"], stem, file, cos),
+        "small": _store_image(prepared["small"], f"{stem}_s56", file, cos),
+    }
 
 
-def save_avatar(user_id: int, file: Optional[UploadFile], cos: Optional[dict] = None) -> dict:
-    """保存用户头像（同样压缩为 webp），返回 {path, storage}。"""
-    empty = {"path": None, "storage": "local"}
+def save_avatar(
+    user_id: int, file: Optional[UploadFile], cos: Optional[dict] = None
+) -> dict:
+    """保存用户头像（压缩为 webp），返回 {path, storage}。"""
     if file is None or not file.filename:
-        return empty
+        return _empty_slot()
 
-    key = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}.webp"
-    data = compress_to_webp(file)
-    if data is None:
-        raw = file.file.read()
-        if not raw:
-            return empty
+    prepared = prepare_thumbnails(file)
+    stem = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}"
+
+    if prepared["raw"] or not prepared["main"]:
+        if not prepared["main"]:
+            return _empty_slot()
         ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
-        key = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}{ext}"
-        stored = _put_bytes(raw, key, "application/octet-stream", cos)
-    else:
-        stored = _put_bytes(data, key, "image/webp", cos)
+        stored = _put_bytes(
+            prepared["main"], f"{stem}{ext}", "application/octet-stream", cos
+        )
+        return {"path": stored, "storage": "cos" if cos else "local"}
 
-    return {"path": stored, "storage": "cos" if cos else "local"}
+    return _store_image(prepared["main"], stem, file, cos)
+
+
+# ---------- 资产文件 ----------
 
 
 def place_upload(

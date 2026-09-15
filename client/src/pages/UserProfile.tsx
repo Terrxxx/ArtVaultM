@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography, message } from 'antd'
+import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
@@ -7,29 +7,31 @@ import type { UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
 
 export default function UserProfilePage() {
-  const { id } = useParams()
-  const userId = Number(id)
+  // 路由为 /{用户名}
+  const { username } = useParams()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    const load = async () => {
-      setLoading(true)
-      try {
-        const p = await api.getUserProfile(userId)
+    setLoading(true)
+    setError(null)
+    api
+      .getUserProfileByUsername(String(username))
+      .then((p) => {
         if (alive) setProfile(p)
-      } catch (e: any) {
-        message.error(e.response?.data?.detail || '加载失败')
-      } finally {
+      })
+      .catch((e) => {
+        if (alive) setError(e.response?.data?.detail || '用户不存在')
+      })
+      .finally(() => {
         if (alive) setLoading(false)
-      }
-    }
-    load()
+      })
     return () => {
       alive = false
     }
-  }, [userId])
+  }, [username])
 
   if (loading) {
     return (
@@ -38,7 +40,9 @@ export default function UserProfilePage() {
       </div>
     )
   }
-  if (!profile) return <Empty />
+  if (error || !profile) {
+    return <Empty description={error || '用户不存在'} style={{ marginTop: 80 }} />
+  }
 
   const { user, stats, projects } = profile
 
@@ -69,7 +73,7 @@ export default function UserProfilePage() {
       </Card>
 
       {projects.length === 0 ? (
-        <Empty description="该用户还没有上传过资产" style={{ marginTop: 60 }} />
+        <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 60 }} />
       ) : (
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
           {projects.map((p) => (
@@ -77,6 +81,7 @@ export default function UserProfilePage() {
               key={p.project_id}
               title={
                 <Space size={10}>
+                  {/* /projects/:id 会自动重定向到规范地址 */}
                   <Link to={`/projects/${p.project_id}`}>{p.project_name}</Link>
                   <Tag>{p.assets.length} 个资产</Tag>
                   {p.github_repo_url && (

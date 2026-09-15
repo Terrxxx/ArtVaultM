@@ -128,6 +128,9 @@ class AssetVersion(Base):
     file_hash = Column(String, nullable=True, index=True)
     thumbnail = Column(String, nullable=True)
     thumbnail_storage = Column(String, default="local")  # local / cos
+    # 版本列表用的 56x56 小图（单独存，避免列表页加载大图）
+    thumb_small = Column(String, nullable=True)
+    thumb_small_storage = Column(String, default="local")
     storage = Column(String, default="local")  # local=本地磁盘 / cos=腾讯云COS
     changelog = Column(String, nullable=True)
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)

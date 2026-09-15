@@ -1,12 +1,10 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Asset, Project, ProjectMember, User
+from ..models import Asset, User
 from ..serializers import asset_to_dict, user_brief
-from .deps import get_current_user, visible_project_ids
+from .deps import get_current_user, viewable_project_ids
 
 router = APIRouter()
 
@@ -28,33 +26,24 @@ def search_users(
     return [user_brief(u) for u in users]
 
 
-@router.get("/users/{user_id}")
-def get_user_profile(
-    user_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """个人资料页：该用户在哪些项目里上传了哪些资产。"""
-    target = db.get(User, user_id)
-    if target is None:
-        raise HTTPException(status_code=404, detail="用户不存在")
-
+def _profile_payload(db: Session, target: User, viewer: User) -> dict:
+    """该用户在哪些项目里上传了哪些资产。"""
     assets = (
         db.query(Asset)
-        .filter(Asset.created_by == user_id)
+        .filter(Asset.created_by == target.id)
         .order_by(Asset.created_at.desc())
         .all()
     )
 
     # 只展示当前访问者有权看到的项目
-    allowed = visible_project_ids(db, user)
+    allowed = viewable_project_ids(db, viewer)
     if allowed is not None:
         assets = [a for a in assets if a.project_id in allowed]
 
     grouped: dict = {}
     for a in assets:
         bucket = grouped.setdefault(a.project_id, {"project": a.project, "assets": []})
-        bucket["assets"].append(asset_to_dict(a))
+        bucket["assets"].append(asset_to_dict(a, current_user_id=viewer.id))
 
     projects = [
         {
@@ -75,3 +64,28 @@ def get_user_profile(
         },
         "projects": projects,
     }
+
+
+@router.get("/users/by-username/{username}")
+def get_user_profile_by_username(
+    username: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """个人主页按用户名访问（前端路由 /{用户名}）。"""
+    target = db.query(User).filter(User.username == username).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _profile_payload(db, target, user)
+
+
+@router.get("/users/{user_id}")
+def get_user_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _profile_payload(db, target, user)

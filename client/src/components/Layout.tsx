@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Avatar, Badge, Dropdown, Layout as AntLayout, Space } from 'antd'
 import { BellOutlined, DatabaseOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { api, userPath } from '../api'
 import { isAdminLike } from '../types'
 import { useAuthStore } from '../store'
 
@@ -89,7 +89,7 @@ export default function Layout() {
                 { key: 'logout', label: '退出登录' },
               ],
               onClick: ({ key }) => {
-                if (key === 'profile' && user) navigate(`/users/${user.id}`)
+                if (key === 'profile' && user) navigate(userPath(user))
                 if (key === 'settings') navigate('/settings')
                 if (key === 'logout') {
                   logout()

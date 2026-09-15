@@ -140,10 +140,10 @@ def ensure_project_editor(db: Session, project_id: int, user: User) -> Project:
 
 
 def visible_project_ids(db: Session, user: User) -> Optional[List[int]]:
-    """当前用户可见的项目 id 列表。
+    """「我的项目」可见的项目 id 列表。
 
-    注意：任何人（含高级管理员）在「我的项目」里只看自己拥有或受邀加入的项目；
-    全量项目（含他人私有项目）只在管理后台的专门接口里提供。
+    任何人（含高级管理员）都只看自己拥有或受邀加入的项目；
+    全部项目（含他人私有项目）只在管理后台的专门接口里提供。
     """
     owned = [p.id for p in db.query(Project).filter(Project.owner_id == user.id).all()]
     joined = [
@@ -156,3 +156,15 @@ def visible_project_ids(db: Session, user: User) -> Optional[List[int]]:
         .all()
     ]
     return list(set(owned) | set(joined))
+
+
+def viewable_project_ids(db: Session, user: User) -> Optional[List[int]]:
+    """按「能否查看该项目」返回 id 列表；None 表示全部可见。
+
+    与 ensure_project_access 的查看规则保持一致：管理员与高级管理员可以查看
+    全部项目（进入后台审阅所需），其余人只有自己拥有的或受邀加入的。
+    用于个人主页这类「按查看权限过滤内容」的场景，不等同于「我的项目」。
+    """
+    if is_admin_like(user):
+        return None
+    return visible_project_ids(db, user)
