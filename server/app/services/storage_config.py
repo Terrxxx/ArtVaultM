@@ -62,7 +62,24 @@ def write_config(db: Session, payload) -> dict:
 
     db.commit()
     db.refresh(c)
+    refresh_cache(db)
     return read_config(db)
+
+
+# ---------- 进程内缓存 ----------
+# 序列化器需要在没有 db 会话的情况下把存储路径转成可访问 URL（例如头像/缩略图），
+# 因此把 COS 参数缓存一份。配置写入和启动时会刷新。
+
+_cached_params: Optional[dict] = None
+
+
+def refresh_cache(db: Session) -> None:
+    global _cached_params
+    _cached_params = cos_params(db)
+
+
+def cached_params() -> Optional[dict]:
+    return _cached_params
 
 
 def cos_params(db: Session) -> Optional[dict]:

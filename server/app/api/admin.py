@@ -1,19 +1,11 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..core.security import hash_password
 from ..database import get_db
 from ..models import Project, User
-from ..schemas import (
-    StorageConfigIn,
-    UserCreate,
-    UserOut,
-    UserStatusRequest,
-    UserUpdate,
-)
-from ..serializers import project_to_dict
+from ..schemas import StorageConfigIn, UserCreate, UserStatusRequest, UserUpdate
+from ..serializers import project_to_dict, user_out
 from ..services import storage_config
 from .deps import (
     ADMIN,
@@ -30,7 +22,7 @@ router = APIRouter()
 VALID_ROLES = (MEMBER, ADMIN, SUPER_ADMIN)
 
 
-@router.post("/users", response_model=UserOut)
+@router.post("/users")
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
@@ -55,17 +47,17 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return user_out(user)
 
 
-@router.get("/users", response_model=List[UserOut])
+@router.get("/users")
 def list_users(
     db: Session = Depends(get_db), admin: User = Depends(get_current_admin)
 ):
-    return db.query(User).order_by(User.id).all()
+    return [user_out(u) for u in db.query(User).order_by(User.id).all()]
 
 
-@router.patch("/users/{user_id}", response_model=UserOut)
+@router.patch("/users/{user_id}")
 def update_user(
     user_id: int,
     payload: UserUpdate,
@@ -92,10 +84,10 @@ def update_user(
 
     db.commit()
     db.refresh(user)
-    return user
+    return user_out(user)
 
 
-@router.patch("/users/{user_id}/status", response_model=UserOut)
+@router.patch("/users/{user_id}/status")
 def set_user_status(
     user_id: int,
     payload: UserStatusRequest,
@@ -112,7 +104,7 @@ def set_user_status(
     user.status = payload.status
     db.commit()
     db.refresh(user)
-    return user
+    return user_out(user)
 
 
 @router.get("/projects")

@@ -142,7 +142,7 @@ def create_asset(
         )
         deduped = False
 
-    thumb = storage.save_version_thumbnail(asset.id, 1, thumbnail)
+    thumb = storage.save_version_thumbnail(asset.id, 1, thumbnail, cos)
 
     db.add(
         AssetVersion(
@@ -150,7 +150,8 @@ def create_asset(
             version=1,
             is_latest=True,
             changelog=changelog,
-            thumbnail=thumb,
+            thumbnail=thumb["path"],
+            thumbnail_storage=thumb["storage"],
             storage=placed["storage"],
             file_path=placed["file_path"],
             file_name=staged["file_name"],
@@ -160,7 +161,7 @@ def create_asset(
             uploader_id=user.id,
         )
     )
-    asset.cover_thumbnail = thumb
+    asset.cover_thumbnail = thumb["path"]
 
     notify.notify_subscribers(
         db,
@@ -225,13 +226,17 @@ def update_asset(
 
     # 换封面图：同时更新最新版本的缩略图，保证版本历史显示一致
     if thumbnail is not None and thumbnail.filename:
+        cos = storage_config.cos_params(db)
         new_thumb = storage.save_version_thumbnail(
-            asset.id, asset.versions[0].version if asset.versions else 1, thumbnail
+            asset.id, asset.versions[0].version if asset.versions else 1, thumbnail, cos
         )
-        asset.cover_thumbnail = new_thumb
-        if asset.versions:
-            storage.delete_file(asset.versions[0].thumbnail)
-            asset.versions[0].thumbnail = new_thumb
+        if new_thumb["path"]:
+            if asset.versions:
+                latest = asset.versions[0]
+                storage.delete_file(latest.thumbnail, latest.thumbnail_storage or "local", cos)
+                latest.thumbnail = new_thumb["path"]
+                latest.thumbnail_storage = new_thumb["storage"]
+            asset.cover_thumbnail = new_thumb["path"]
 
     db.commit()
     db.refresh(asset)
@@ -263,10 +268,9 @@ def delete_asset(
     ).delete(synchronize_session=False)
 
     for v in asset.versions:
-        storage.delete_file(v.thumbnail)  # 缩略图始终在本地
+        storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
         if v.storage == "cos":
             storage.delete_file(v.file_path, "cos", cos)
-    storage.delete_file(asset.cover_thumbnail)
     storage.delete_asset_dir(project_id, asset_id)
 
     db.delete(asset)

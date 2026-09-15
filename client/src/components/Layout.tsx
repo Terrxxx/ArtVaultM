@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Avatar, Badge, Dropdown, Layout as AntLayout, Space } from 'antd'
 import { BellOutlined, DatabaseOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { api, uploadUrl } from '../api'
+import { api } from '../api'
 import { isAdminLike } from '../types'
 import { useAuthStore } from '../store'
 
@@ -99,7 +99,7 @@ export default function Layout() {
             }}
           >
             <Space style={{ cursor: 'pointer' }}>
-              <Avatar size="small" icon={<UserOutlined />} src={uploadUrl(user?.avatar) || undefined} />
+              <Avatar size="small" icon={<UserOutlined />} src={user?.avatar_url || undefined} />
               <span>{user?.nickname || user?.username}</span>
             </Space>
           </Dropdown>

@@ -1,4 +1,5 @@
 import hashlib
+import io
 import os
 import shutil
 import uuid
@@ -12,8 +13,13 @@ from . import storage_config
 
 CHUNK = 1024 * 1024
 
-# 说明：缩略图与头像始终保存在本地（前端用 <img> 直读 /uploads，无需每次签名）；
-# 仅「资产文件本体」会按配置上传到 COS。
+# 缩略图压缩目标
+THUMB_MAX_EDGE = 512
+THUMB_TARGET_BYTES = 10 * 1024  # 10KB
+THUMB_QUALITIES = (82, 74, 66, 58, 50, 42, 34, 26, 20)
+
+# 图片展示链接的有效期（头像/缩略图会随页面一起加载）
+DISPLAY_URL_TTL = 6 * 3600
 
 
 def _safe_name(filename: str) -> str:
@@ -50,6 +56,98 @@ def stage_upload(file: UploadFile) -> dict:
         "file_size": size,
         "file_format": os.path.splitext(safe_name)[1].lstrip(".").lower() or None,
     }
+
+
+def _put_bytes(data: bytes, key: str, content_type: str, cos: Optional[dict]) -> str:
+    """把内存中的字节写入 COS 或本地，返回存储路径。"""
+    if cos:
+        object_key = f"{cos['prefix']}/{key}"
+        storage_config.build_client(cos).put_object(
+            Bucket=cos["bucket"], Body=data, Key=object_key, ContentType=content_type
+        )
+        return object_key
+
+    path = Path(settings.upload_dir) / key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return key
+
+
+def compress_to_webp(file: UploadFile) -> Optional[bytes]:
+    """把上传的图片压缩成 <10KB 的 webp；无法处理时返回 None（回落到原图）。"""
+    try:
+        from PIL import Image, ImageOps
+
+        raw = file.file.read()
+        if not raw:
+            return None
+        img = Image.open(io.BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
+
+        edge = THUMB_MAX_EDGE
+        best = None
+        # 先在质量维度压，仍超标就缩小尺寸再来一轮
+        while edge >= 96:
+            candidate = img.copy()
+            candidate.thumbnail((edge, edge))
+            for quality in THUMB_QUALITIES:
+                buf = io.BytesIO()
+                candidate.save(buf, format="WEBP", quality=quality, method=4)
+                data = buf.getvalue()
+                if best is None or len(data) < len(best):
+                    best = data
+                if len(data) <= THUMB_TARGET_BYTES:
+                    return data
+            edge //= 2
+        return best
+    except Exception:  # noqa: BLE001 - 非图片或解码失败时不改写
+        return None
+
+
+def save_version_thumbnail(
+    asset_id: int, version: int, file: Optional[UploadFile], cos: Optional[dict] = None
+) -> dict:
+    """保存某个版本的缩略图（压缩为 webp），返回 {path, storage}。"""
+    empty = {"path": None, "storage": "local"}
+    if file is None or not file.filename:
+        return empty
+
+    key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}.webp"
+    data = compress_to_webp(file)
+    if data is None:
+        # 压缩失败（非图片等）→ 原样保存，但保持同一个 key 约定
+        raw = file.file.read()
+        if not raw:
+            return empty
+        ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
+        key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}{ext}"
+        stored = _put_bytes(raw, key, "application/octet-stream", cos)
+    else:
+        stored = _put_bytes(data, key, "image/webp", cos)
+
+    return {"path": stored, "storage": "cos" if cos else "local"}
+
+
+def save_avatar(user_id: int, file: Optional[UploadFile], cos: Optional[dict] = None) -> dict:
+    """保存用户头像（同样压缩为 webp），返回 {path, storage}。"""
+    empty = {"path": None, "storage": "local"}
+    if file is None or not file.filename:
+        return empty
+
+    key = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}.webp"
+    data = compress_to_webp(file)
+    if data is None:
+        raw = file.file.read()
+        if not raw:
+            return empty
+        ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
+        key = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+        stored = _put_bytes(raw, key, "application/octet-stream", cos)
+    else:
+        stored = _put_bytes(data, key, "image/webp", cos)
+
+    return {"path": stored, "storage": "cos" if cos else "local"}
 
 
 def place_upload(
@@ -91,50 +189,12 @@ def discard_staged(tmp_path: Path) -> None:
         pass
 
 
-def save_version_thumbnail(asset_id: int, version: int, file: UploadFile) -> Optional[str]:
-    """保存某个版本的缩略图（始终存本地），返回相对路径。"""
-    if file is None or not file.filename:
-        return None
-    rel_dir = Path("thumbnails")
-    out_dir = Path(settings.upload_dir) / rel_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    safe_name = _safe_name(file.filename)
-    ext = os.path.splitext(safe_name)[1] or ".png"
-    stored_name = f"{asset_id}_v{version}_{uuid.uuid4().hex[:8]}{ext}"
-    path = out_dir / stored_name
-
-    with path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    return (rel_dir / stored_name).as_posix()
-
-
-def save_avatar(user_id: int, file: UploadFile) -> Optional[str]:
-    """保存用户头像（始终存本地），返回相对路径。"""
-    if file is None or not file.filename:
-        return None
-    rel_dir = Path("avatars")
-    out_dir = Path(settings.upload_dir) / rel_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    safe_name = _safe_name(file.filename)
-    ext = os.path.splitext(safe_name)[1] or ".png"
-    stored_name = f"{user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    path = out_dir / stored_name
-
-    with path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    return (rel_dir / stored_name).as_posix()
-
-
 def resolve_path(rel_path: str) -> Path:
     return Path(settings.upload_dir) / rel_path
 
 
 def file_exists(rel_path: str, storage: str = "local", cos: Optional[dict] = None) -> bool:
-    """判断某个版本的文件是否还在（本地磁盘或 COS）。"""
+    """判断文件是否还在（本地磁盘或 COS）。"""
     if storage == "cos":
         if not cos:
             return False
@@ -148,7 +208,9 @@ def file_exists(rel_path: str, storage: str = "local", cos: Optional[dict] = Non
     return resolve_path(rel_path).exists()
 
 
-def delete_file(rel_path: Optional[str], storage: str = "local", cos: Optional[dict] = None) -> None:
+def delete_file(
+    rel_path: Optional[str], storage: str = "local", cos: Optional[dict] = None
+) -> None:
     """删除单个文件，忽略不存在的情况。"""
     if not rel_path:
         return
@@ -180,12 +242,39 @@ def delete_asset_dir(project_id: int, asset_id: int) -> None:
     shutil.rmtree(target, ignore_errors=True)
 
 
-def presigned_url(key: str, cos: dict, expires: int = 600) -> str:
-    """生成 COS 临时下载链接（有效期默认 10 分钟）。"""
+def presigned_url(
+    key: str, cos: dict, expires: int = 600, download_name: Optional[str] = None
+) -> str:
+    """生成 COS 临时访问链接；给了 download_name 则让对象以附件形式下载。"""
+    params = None
+    if download_name:
+        from urllib.parse import quote
+
+        params = {
+            "response-content-disposition": (
+                f"attachment; filename*=UTF-8''{quote(download_name)}"
+            )
+        }
     client = storage_config.build_client(cos)
     return client.get_presigned_url(
         Method="GET",
         Bucket=cos["bucket"],
         Key=key,
         Expired=expires,
+        Params=params,
     )
+
+
+def display_url(rel_path: Optional[str], storage: str = "local") -> Optional[str]:
+    """把存储路径转成前端可直接使用的 URL（本地走 /uploads，COS 走临时签名）。"""
+    if not rel_path:
+        return None
+    if storage == "cos":
+        cos = storage_config.cached_params()
+        if not cos:
+            return None
+        try:
+            return presigned_url(rel_path, cos, DISPLAY_URL_TTL)
+        except Exception:  # noqa: BLE001
+            return None
+    return f"/uploads/{rel_path}"

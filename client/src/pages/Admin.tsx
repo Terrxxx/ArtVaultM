@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
+  Avatar,
   Button,
   Card,
   Form,
@@ -16,7 +17,7 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath } from '../api'
 import type { AdminProject, StorageConfig, User } from '../types'
@@ -128,6 +129,14 @@ function UserManager({ me }: { me: User | null }) {
 
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 60 },
+    {
+      title: '头像',
+      dataIndex: 'avatar',
+      width: 60,
+      render: (_: unknown, u: User) => (
+        <Avatar size="small" icon={<UserOutlined />} src={u.avatar_url || undefined} />
+      ),
+    },
     { title: '用户名', dataIndex: 'username' },
     { title: '昵称', dataIndex: 'nickname', render: (v: string) => v || '-' },
     {

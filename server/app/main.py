@@ -26,12 +26,14 @@ from .config import settings
 from .core.security import hash_password
 from .database import Base, SessionLocal, engine
 from .models import Project, User
+from .services import storage_config
 from .services.slug import slugify
 
 # 已存在的表需要补的新列（无 Alembic，用幂等 ALTER 兜底）
 WANTED_COLUMNS = {
     "users": {
         "github_url": "VARCHAR",
+        "avatar_storage": "VARCHAR DEFAULT 'local'",
     },
     "projects": {
         "is_archived": "BOOLEAN DEFAULT 0",
@@ -43,6 +45,7 @@ WANTED_COLUMNS = {
     "asset_versions": {
         "file_hash": "VARCHAR",
         "thumbnail": "VARCHAR",
+        "thumbnail_storage": "VARCHAR DEFAULT 'local'",
         "storage": "VARCHAR DEFAULT 'local'",
     },
     "comments": {
@@ -135,6 +138,9 @@ async def lifespan(app: FastAPI):
     ensure_columns()
     backfill_slugs()
     seed_admin()
+    # 把对象存储配置载入进程内缓存，供序列化器生成图片 URL
+    with SessionLocal() as db:
+        storage_config.refresh_cache(db)
     yield
 
 

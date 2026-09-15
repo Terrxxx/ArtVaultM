@@ -3,6 +3,8 @@ export interface UserBrief {
   username: string
   nickname?: string | null
   avatar?: string | null
+  /** 后端算好的头像直链（本地为 /uploads/…，COS 为临时签名链接） */
+  avatar_url?: string | null
   github_url?: string | null
 }
 
@@ -21,6 +23,7 @@ export interface Version {
   file_format?: string | null
   file_hash?: string | null
   thumbnail?: string | null
+  thumbnail_url?: string | null
   changelog?: string | null
   is_latest: boolean
   download_count: number
@@ -45,6 +48,7 @@ export interface Asset {
   description?: string | null
   tags: string[]
   cover_thumbnail?: string | null
+  cover_thumbnail_url?: string | null
   status: string
   created_by: number
   creator?: UserBrief | null

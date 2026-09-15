@@ -1,6 +1,7 @@
 from typing import Optional
 
 from .models import Asset, AssetVersion, Category, Project, ProjectMember, User
+from .services import storage
 
 
 def user_brief(u: Optional[User]) -> Optional[dict]:
@@ -11,7 +12,18 @@ def user_brief(u: Optional[User]) -> Optional[dict]:
         "username": u.username,
         "nickname": u.nickname,
         "avatar": u.avatar,
+        "avatar_url": storage.display_url(u.avatar, u.avatar_storage or "local"),
         "github_url": u.github_url,
+    }
+
+
+def user_out(u: User) -> dict:
+    """带头像直链的完整用户信息（供 /auth/me、管理后台使用）。"""
+    return {
+        **user_brief(u),
+        "role": u.role,
+        "status": u.status,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
 
@@ -25,6 +37,7 @@ def version_to_dict(v: AssetVersion) -> dict:
         "file_format": v.file_format,
         "file_hash": v.file_hash,
         "thumbnail": v.thumbnail,
+        "thumbnail_url": storage.display_url(v.thumbnail, v.thumbnail_storage or "local"),
         "changelog": v.changelog,
         "is_latest": v.is_latest,
         "download_count": len(v.downloads),
@@ -43,6 +56,14 @@ def asset_to_dict(
     if latest is None and a.versions:
         latest = a.versions[0]
 
+    # 封面来自某个版本的缩略图，反查它的存储位置（本地 / COS）
+    cover_storage = "local"
+    if a.cover_thumbnail:
+        for v in a.versions:
+            if v.thumbnail == a.cover_thumbnail:
+                cover_storage = v.thumbnail_storage or "local"
+                break
+
     data = {
         "id": a.id,
         "project_id": a.project_id,
@@ -51,6 +72,7 @@ def asset_to_dict(
         "description": a.description,
         "tags": a.tags or [],
         "cover_thumbnail": a.cover_thumbnail,
+        "cover_thumbnail_url": storage.display_url(a.cover_thumbnail, cover_storage),
         "status": a.status,
         "created_by": a.created_by,
         "creator": user_brief(a.creator),

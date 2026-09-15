@@ -120,6 +120,11 @@ export const api = {
     client
       .get<{ token: string; url: string; expires_in: number }>(`/versions/${versionId}/stream-token`)
       .then((r) => r.data),
+  /** 下载直链：本地为带令牌的流地址，COS 为签名链接 */
+  downloadUrl: (versionId: number) =>
+    client
+      .get<{ url: string; external: boolean }>(`/versions/${versionId}/download-url`)
+      .then((r) => r.data),
 
   // ---------- 点赞 ----------
   toggleLike: (assetId: number) =>
@@ -184,13 +189,24 @@ export const api = {
     client.post<{ ok: boolean; message: string }>('/admin/storage-config/test').then((r) => r.data),
 }
 
-// 把后端返回的相对路径（如 thumbnails/x.png）转成可访问 URL
-export function uploadUrl(rel?: string | null): string | null {
-  return rel ? `/uploads/${rel}` : null
-}
+// 后端已在序列化时把存储路径解析成可访问 URL（本地 /uploads，COS 临时签名），
+// 前端直接用 *_url 字段即可，无需再自行拼接。
 
-export function thumbUrl(cover?: string | null): string | null {
-  return uploadUrl(cover)
+/**
+ * 触发浏览器原生下载。
+ *
+ * 不用 XHR/blob：COS 模式下文件在对象存储上，XHR 会因跨域被 CORS 拦截，
+ * 且大文件会整份读进内存。这里只取直链交给浏览器，由它流式下载。
+ */
+export async function downloadVersion(versionId: number, filename: string) {
+  const { url, external } = await api.downloadUrl(versionId)
+  const a = document.createElement('a')
+  a.href = url
+  if (!external) a.download = filename
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 /** 项目的规范路径：/用户名/项目slug（缺 slug 时回落到 /projects/{id}） */
@@ -214,23 +230,6 @@ export function assetPath(a: {
     return `/${a.project_owner.username}/${a.project_slug}/${a.id}`
   }
   return `/assets/${a.id}`
-}
-
-export function downloadUrl(versionId: number): string {
-  return `/api/versions/${versionId}/download`
-}
-
-// 带鉴权的下载：用 axios 拉取 blob 再触发浏览器保存
-export async function downloadFile(versionId: number, filename: string) {
-  const res = await client.get(`/versions/${versionId}/download`, { responseType: 'blob' })
-  const url = URL.createObjectURL(res.data)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 export function formatSize(bytes?: number | null): string {

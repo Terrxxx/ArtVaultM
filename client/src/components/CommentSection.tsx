@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Avatar, Button, Empty, Input, List, Popconfirm, Select, Space, Tag, Typography, message } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
-import { api, uploadUrl } from '../api'
+import { api } from '../api'
 import type { Comment, UserBrief, Version } from '../types'
 import { useAuthStore } from '../store'
 
@@ -86,7 +86,7 @@ function MentionInput({
           renderItem={(u) => (
             <List.Item style={{ cursor: 'pointer', padding: '6px 10px' }} onClick={() => insert(u)}>
               <Space>
-                <Avatar size="small" icon={<UserOutlined />} src={uploadUrl(u.avatar) || undefined} />
+                <Avatar size="small" icon={<UserOutlined />} src={u.avatar_url || undefined} />
                 {u.nickname || u.username}
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   @{u.username}
@@ -185,7 +185,7 @@ export default function CommentSection({ assetId, versions }: Props) {
     return (
       <div key={c.id} style={{ marginBottom: 14 }}>
         <Space align="start" style={{ width: '100%' }}>
-          <Avatar size="small" icon={<UserOutlined />} src={uploadUrl(c.user.avatar) || undefined} />
+          <Avatar size="small" icon={<UserOutlined />} src={c.user.avatar_url || undefined} />
           <div style={{ flex: 1 }}>
             <Space size={8} wrap>
               <Typography.Text strong>{c.user.nickname || c.user.username}</Typography.Text>
@@ -213,7 +213,7 @@ export default function CommentSection({ assetId, versions }: Props) {
                 {replies.map((r) => (
                   <div key={r.id} style={{ marginBottom: 8 }}>
                     <Space size={8} wrap>
-                      <Avatar size="small" icon={<UserOutlined />} src={uploadUrl(r.user.avatar) || undefined} />
+                      <Avatar size="small" icon={<UserOutlined />} src={r.user.avatar_url || undefined} />
                       <Typography.Text strong>{r.user.nickname || r.user.username}</Typography.Text>
                       {r.version != null && <Tag color="blue">v{r.version}</Tag>}
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>

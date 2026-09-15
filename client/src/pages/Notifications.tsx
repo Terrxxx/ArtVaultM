@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Avatar, Button, Card, Empty, List, Space, Tag, Typography, message } from 'antd'
 import { TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, uploadUrl } from '../api'
+import { api } from '../api'
 import type { Invitation, Notification } from '../types'
 
 const TYPE_LABEL: Record<string, { text: string; color: string }> = {
@@ -132,7 +132,7 @@ export default function Notifications() {
                   }}
                 >
                   <List.Item.Meta
-                    avatar={<Avatar icon={<UserOutlined />} src={uploadUrl(n.actor?.avatar) || undefined} />}
+                    avatar={<Avatar icon={<UserOutlined />} src={n.actor?.avatar_url || undefined} />}
                     title={
                       <Space size={8} wrap>
                         <Tag color={meta.color}>{meta.text}</Tag>

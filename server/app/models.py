@@ -22,6 +22,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     nickname = Column(String, nullable=True)
     avatar = Column(String, nullable=True)
+    avatar_storage = Column(String, default="local")  # local / cos
     github_url = Column(String, nullable=True)
     role = Column(String, default="member")  # admin / member
     status = Column(String, default="active")  # active / disabled
@@ -126,6 +127,7 @@ class AssetVersion(Base):
     file_format = Column(String, nullable=True)
     file_hash = Column(String, nullable=True, index=True)
     thumbnail = Column(String, nullable=True)
+    thumbnail_storage = Column(String, default="local")  # local / cos
     storage = Column(String, default="local")  # local=本地磁盘 / cos=腾讯云COS
     changelog = Column(String, nullable=True)
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -134,7 +136,9 @@ class AssetVersion(Base):
 
     asset = relationship("Asset", back_populates="versions")
     uploader = relationship("User")
-    downloads = relationship("DownloadLog", cascade="all, delete-orphan")
+    downloads = relationship(
+        "DownloadLog", back_populates="asset_version", cascade="all, delete-orphan"
+    )
 
 
 class Comment(Base):
@@ -179,7 +183,7 @@ class DownloadLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    asset_version = relationship("AssetVersion")
+    asset_version = relationship("AssetVersion", back_populates="downloads")
     user = relationship("User")
 
 

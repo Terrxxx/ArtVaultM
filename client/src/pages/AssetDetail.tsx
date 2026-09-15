@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Avatar,
   Button,
   Card,
   Col,
@@ -21,9 +22,10 @@ import {
   FileOutlined,
   LikeFilled,
   LikeOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, downloadFile, formatSize, thumbUrl, uploadUrl } from '../api'
+import { api, downloadVersion, formatSize } from '../api'
 import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
@@ -76,7 +78,7 @@ export default function AssetDetail() {
   const versions = asset.versions || []
   const current = versions.find((v) => v.id === previewVersion) || versions[0]
   // 优先展示所选版本的缩略图，没有则回落到资产封面
-  const previewSrc = thumbUrl(current?.thumbnail) || thumbUrl(asset.cover_thumbnail)
+  const previewSrc = current?.thumbnail_url || asset.cover_thumbnail_url || null
   const canWrite = user?.id === asset.created_by || isSuperAdmin(user?.role)
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
@@ -160,7 +162,14 @@ export default function AssetDetail() {
                 <Descriptions.Item label="上传者">
                   {asset.creator ? (
                     <Link to={`/users/${asset.creator.id}`}>
-                      {asset.creator.nickname || asset.creator.username}
+                      <Space size={6}>
+                        <Avatar
+                          size={20}
+                          icon={<UserOutlined />}
+                          src={asset.creator.avatar_url || undefined}
+                        />
+                        {asset.creator.nickname || asset.creator.username}
+                      </Space>
                     </Link>
                   ) : (
                     '-'
@@ -223,7 +232,7 @@ export default function AssetDetail() {
             <List
               dataSource={visibleVersions}
               renderItem={(v: Version) => {
-                const thumb = thumbUrl(v.thumbnail)
+                const thumb = v.thumbnail_url || null
                 const active = current?.id === v.id
                 return (
                   <List.Item
@@ -235,7 +244,7 @@ export default function AssetDetail() {
                         icon={<DownloadOutlined />}
                         onClick={(e) => {
                           e.stopPropagation()
-                          downloadFile(v.id, v.file_name)
+                          downloadVersion(v.id, v.file_name)
                         }}
                       >
                         下载
@@ -291,16 +300,25 @@ export default function AssetDetail() {
                           {v.changelog && (
                             <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
                           )}
-                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          <Space size={6} align="center" style={{ fontSize: 12 }}>
                             {v.uploader ? (
                               <Link to={`/users/${v.uploader.id}`}>
-                                {v.uploader.nickname || v.uploader.username}
+                                <Space size={6} align="center">
+                                  <Avatar
+                                    size={18}
+                                    icon={<UserOutlined />}
+                                    src={v.uploader.avatar_url || undefined}
+                                  />
+                                  {v.uploader.nickname || v.uploader.username}
+                                </Space>
                               </Link>
                             ) : (
-                              '未知'
-                            )}{' '}
-                            上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
-                          </Typography.Text>
+                              <Typography.Text type="secondary">未知</Typography.Text>
+                            )}
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
+                            </Typography.Text>
+                          </Space>
                         </Space>
                       }
                     />

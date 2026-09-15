@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Avatar,
   Button,
   Card,
   Col,
@@ -18,8 +19,15 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { EditOutlined, FolderOutlined, GithubOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import {
+  EditOutlined,
+  FolderOutlined,
+  GithubOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath } from '../api'
 import type { Project } from '../types'
 import { useAuthStore } from '../store'
@@ -113,6 +121,20 @@ export default function ProjectList() {
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             {p.description || '暂无描述'}
           </Typography.Text>
+          {p.owner && (
+            <Link to={`/users/${p.owner.id}`} onClick={(e) => e.stopPropagation()}>
+              <Space size={6} align="center">
+                <Avatar
+                  size={20}
+                  icon={<UserOutlined />}
+                  src={p.owner.avatar_url || undefined}
+                />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  创建者 {p.owner.nickname || p.owner.username}
+                </Typography.Text>
+              </Space>
+            </Link>
+          )}
           <Space size={8} wrap>
             <Tag>{p.asset_count} 个资产</Tag>
             <Tag>{p.category_count} 个分类</Tag>

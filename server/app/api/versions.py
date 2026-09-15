@@ -111,14 +111,15 @@ def upload_version(
         deduped = False
 
     # 每个版本独立保存自己的缩略图
-    thumb = storage.save_version_thumbnail(asset.id, next_version, thumbnail)
+    thumb = storage.save_version_thumbnail(asset.id, next_version, thumbnail, cos)
 
     version = AssetVersion(
         asset_id=asset.id,
         version=next_version,
         is_latest=True,
         changelog=changelog,
-        thumbnail=thumb,
+        thumbnail=thumb["path"],
+        thumbnail_storage=thumb["storage"],
         storage=placed["storage"],
         file_path=placed["file_path"],
         file_name=staged["file_name"],
@@ -130,8 +131,8 @@ def upload_version(
     db.add(version)
 
     # 新版本上传了缩略图才替换资产封面，否则保留原封面
-    if thumb:
-        asset.cover_thumbnail = thumb
+    if thumb["path"]:
+        asset.cover_thumbnail = thumb["path"]
 
     summary = f"资产「{asset.name}」发布新版本 v{next_version}"
     # 同时订阅了项目和该资产的用户只发一条，避免重复
@@ -154,6 +155,44 @@ def upload_version(
     data = version_to_dict(version)
     data["deduped"] = deduped
     return data
+
+
+@router.get("/versions/{version_id}/download-url")
+def get_download_url(
+    version_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """返回可直接交给浏览器下载的直链。
+
+    COS 模式下若用 XHR 拉取，浏览器会跨域访问对象存储而被 CORS 拦截，
+    因此这里只返回链接，由前端 `<a href>` / 跳转交给浏览器原生下载。
+    """
+    version = db.get(AssetVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    ensure_project_access(db, version.asset.project_id, user)
+
+    db.add(DownloadLog(asset_version_id=version.id, user_id=user.id))
+    db.commit()
+
+    if version.storage == "cos":
+        cos = storage_config.cos_params(db)
+        if not cos:
+            raise HTTPException(status_code=500, detail="对象存储未正确配置")
+        try:
+            url = storage.presigned_url(
+                version.file_path, cos, PRESIGNED_EXPIRES, download_name=version.file_name
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"生成下载链接失败：{exc}")
+        return {"url": url, "external": True}
+
+    token = create_stream_token(version.id, user.id)
+    return {
+        "url": f"/api/versions/{version.id}/stream?t={token}&dl=1",
+        "external": False,
+    }
 
 
 @router.get("/versions/{version_id}/download")
@@ -210,9 +249,10 @@ def get_stream_token(
 def stream_version(
     version_id: int,
     t: str,
+    dl: bool = False,
     db: Session = Depends(get_db),
 ):
-    """按短期令牌流式返回文件内容，供在线预览使用（不计入下载次数）。"""
+    """按短期令牌返回文件内容：在线预览用（dl=false），下载用（dl=true，附件形式）。"""
     version = db.get(AssetVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="版本不存在")
@@ -242,6 +282,8 @@ def stream_version(
     path = storage.resolve_path(version.file_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
+    if dl:
+        return FileResponse(path, filename=version.file_name)
     # 不带 filename，浏览器按 inline 处理，便于 <img>/<video> 直接渲染
     return FileResponse(path)
 
@@ -267,7 +309,11 @@ def delete_version(
     db.query(Comment).filter(Comment.version_id == version_id).update(
         {Comment.version_id: None}
     )
-    storage.delete_file(version.thumbnail)
+    storage.delete_file(
+        version.thumbnail,
+        version.thumbnail_storage or "local",
+        storage_config.cos_params(db),
+    )
     if version.storage == "cos":
         storage.delete_file(version.file_path, "cos", storage_config.cos_params(db))
 

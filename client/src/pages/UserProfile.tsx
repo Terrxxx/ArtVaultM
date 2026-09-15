@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography, message } from 'antd'
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
-import { api, uploadUrl } from '../api'
+import { api } from '../api'
 import type { UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
 
@@ -46,7 +46,7 @@ export default function UserProfilePage() {
     <div>
       <Card style={{ marginBottom: 20 }}>
         <Space size={24} align="center" wrap>
-          <Avatar size={72} icon={<UserOutlined />} src={uploadUrl(user.avatar) || undefined} />
+          <Avatar size={72} icon={<UserOutlined />} src={user.avatar_url || undefined} />
           <div>
             <Typography.Title level={4} style={{ margin: 0 }}>
               {user.nickname || user.username}

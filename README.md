@@ -99,7 +99,13 @@ cd server
 - ✅ 项目地址 `/{用户名}/{slug}`（中文转拼音）、资产地址 `/{用户名}/{slug}/{id}`
 - ✅ 三级角色：成员 / 管理员 / **高级管理员**
 - ✅ **在线预览**：图片、视频、音频、3D 模型（.gltf/.glb，three.js 旋转查看，单独分包按需加载）
-- ✅ **腾讯云 COS 对象存储**：高级管理员在后台配置，资产上传到桶内 `artvaultm/` 目录，下载/预览时签发临时链接
+- ✅ **腾讯云 COS 对象存储**：高级管理员在后台配置后，**资产文件、缩略图、头像**全部上传到桶内
+  （`artvaultm/projects/…`、`artvaultm/thumbnails/…`、`artvaultm/avatars/…`）；
+  下载与预览均签发临时链接，临时链接可设置 `Content-Disposition` 直接以附件下载
+- ✅ **缩略图与头像自动压缩**：统一转成 WebP 并压到 10KB 以内（按质量迭代，必要时再缩尺寸）
+- ✅ 项目卡片与详情展示**创建者头像与主页链接**；评论、版本、上传者、成员、后台用户列表等
+  所有出现用户的地方都带头像
+- ✅ 下载改为**浏览器原生直链**（不再用 XHR 取 blob），避免跨域访问 COS 被 CORS 拦截，大文件也不占内存
 - ✅ 管理后台：用户管理（昵称/角色/启停）、全部项目管理（含私有项目）、对象存储配置
 
 ## 角色与权限
@@ -128,6 +134,7 @@ cd server
 | 资产 | `GET/POST /projects/{id}/assets`（`q` 全局搜索）· `GET/PATCH/DELETE /assets/{id}` |
 | 版本 | `GET/POST /assets/{id}/versions` · `GET /versions/{id}/download` · `DELETE /versions/{id}` |
 | 预览 | `GET /versions/{id}/stream-token`（换取短期令牌）· `GET /versions/{id}/stream?t=` |
+| 下载 | `GET /versions/{id}/download-url`（返回浏览器可直连的链接）· `GET /versions/{id}/download`（旧接口，保持兼容） |
 | 点赞 | `POST /assets/{id}/like`（切换） |
 | 资产关联 | `GET/POST /assets/{id}/relations` · `DELETE /relations/{id}` |
 | 评论 | `GET/POST /assets/{id}/comments`（`version_id` 筛选）· `DELETE /comments/{id}` |
@@ -136,14 +143,23 @@ cd server
 | 管理员 | `POST/GET /admin/users` · `PATCH /admin/users/{id}`（昵称/角色）· `PATCH /admin/users/{id}/status` · `GET /admin/projects`（含私有，带 `can_edit`） |
 | 对象存储 | `GET/PUT /admin/storage-config` · `POST /admin/storage-config/test`（仅高级管理员） |
 
-## 在线预览说明
+## 在线预览与下载
 
 `<img>/<video>/<audio>` 无法携带 Authorization 头，因此预览走「短期令牌」：
 前端先向 `stream-token` 换取一个**只对当前版本有效、10 分钟过期**的令牌，
-再用它访问 `stream` 接口（不计入下载次数）。COS 模式下 `stream` 会 307 跳转到临时签名 URL。
+再用它访问 `stream` 接口（不计入下载次数）。
+
+**下载不走 XHR/blob**：`download-url` 返回一个可直连的链接（本地为带令牌的流地址、
+COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模式下 XHR 会跨域访问对象存储
+而被 CORS 拦截，且大文件会被整份读进内存。
 
 支持的格式：图片 `png/jpg/jpeg/gif/webp/bmp/svg/avif`；视频 `mp4/webm/mov/m4v/ogv`；
 音频 `mp3/wav/ogg/m4a/flac/aac`；3D 模型 `gltf/glb`（three.js，按需加载）。其余格式回落到缩略图。
+
+## 图片处理
+
+上传的缩略图与头像统一由 Pillow 转成 **WebP 并压到 10KB 以内**：先按质量 82→20 迭代编码，
+仍超标则把最长边减半再来一轮。
 
 ## 数据库迁移
 

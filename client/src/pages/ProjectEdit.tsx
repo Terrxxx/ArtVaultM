@@ -26,8 +26,9 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, projectPath, uploadUrl } from '../api'
+import { api, projectPath } from '../api'
 import type { Category, Project, ProjectMember, UserBrief } from '../types'
+import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
 export default function ProjectEdit() {
@@ -73,8 +74,8 @@ export default function ProjectEdit() {
   }
   if (error || !project) return <Result status="404" title={error || '项目不存在'} />
 
-  const isOwner = me?.role === 'admin' || project.owner_id === me?.id
-  if (!isOwner) return <Result status="403" title="只有项目所有者可以编辑项目" />
+  const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
+  if (!canEdit) return <Result status="403" title="只有项目创建者或高级管理员可以编辑该项目" />
 
   const onSaveBasic = async (values: any) => {
     setSaving(true)
@@ -390,7 +391,7 @@ function MemberManager({
       ]}
     >
       <List.Item.Meta
-        avatar={<Avatar size="small" icon={<UserOutlined />} src={uploadUrl(m.user?.avatar) || undefined} />}
+        avatar={<Avatar size="small" icon={<UserOutlined />} src={m.user?.avatar_url || undefined} />}
         title={<Link to={`/users/${m.user?.id}`}>{m.user?.nickname || m.user?.username}</Link>}
         description={`@${m.user?.username}`}
       />
@@ -429,7 +430,7 @@ function MemberManager({
                 ]}
               >
                 <List.Item.Meta
-                  avatar={<Avatar size="small" icon={<UserOutlined />} src={uploadUrl(u.avatar) || undefined} />}
+                  avatar={<Avatar size="small" icon={<UserOutlined />} src={u.avatar_url || undefined} />}
                   title={u.nickname || u.username}
                   description={`@${u.username}`}
                 />

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Avatar, Button, Card, Form, Input, Space, Typography, Upload, message } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
-import { api, uploadUrl } from '../api'
+import { api } from '../api'
 import { ROLE_LABEL } from '../types'
 import { useAuthStore } from '../store'
 
@@ -54,7 +54,7 @@ export default function Settings() {
 
       <Card title="个人资料" style={{ marginBottom: 16 }}>
         <Space align="center" size={24} style={{ marginBottom: 20 }}>
-          <Avatar size={64} icon={<UserOutlined />} src={uploadUrl(user?.avatar) || undefined} />
+          <Avatar size={64} icon={<UserOutlined />} src={user?.avatar_url || undefined} />
           <div>
             <Typography.Text strong style={{ fontSize: 16 }}>
               {user?.nickname || user?.username}

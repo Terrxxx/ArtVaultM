@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Avatar,
   Button,
   Col,
   Empty,
@@ -20,6 +21,7 @@ import {
   GithubOutlined,
   PlusOutlined,
   SearchOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath } from '../api'
@@ -100,6 +102,20 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             <a href={project.github_repo_url} target="_blank" rel="noreferrer">
               <Tag icon={<GithubOutlined />}>GitHub</Tag>
             </a>
+          )}
+          {project.owner && (
+            <Link to={`/users/${project.owner.id}`}>
+              <Space size={6} align="center">
+                <Avatar
+                  size={22}
+                  icon={<UserOutlined />}
+                  src={project.owner.avatar_url || undefined}
+                />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  创建者 {project.owner.nickname || project.owner.username}
+                </Typography.Text>
+              </Space>
+            </Link>
           )}
           <Space>
             <Button

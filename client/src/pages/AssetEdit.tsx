@@ -19,7 +19,7 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, assetPath, thumbUrl } from '../api'
+import { api, assetPath } from '../api'
 import type { Asset, AssetRelation, Category } from '../types'
 import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
@@ -113,7 +113,7 @@ export default function AssetEdit() {
     }
   }
 
-  const cover = thumbUrl(asset.cover_thumbnail)
+  const cover = asset.cover_thumbnail_url || null
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto' }}>

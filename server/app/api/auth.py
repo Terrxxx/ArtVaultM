@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from ..core.security import create_access_token, hash_password, verify_password
 from ..database import get_db
 from ..models import User
-from ..schemas import ChangePasswordRequest, LoginRequest, Token, UserOut
-from ..services import storage
+from ..schemas import ChangePasswordRequest, LoginRequest, Token
+from ..serializers import user_out
+from ..services import storage, storage_config
 from .deps import get_current_user
 
 router = APIRouter()
@@ -24,12 +25,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me")
 def me(user: User = Depends(get_current_user)):
-    return user
+    return user_out(user)
 
 
-@router.patch("/profile", response_model=UserOut)
+@router.patch("/profile")
 def update_profile(
     nickname: Optional[str] = Form(None),
     github_url: Optional[str] = Form(None),
@@ -42,10 +43,16 @@ def update_profile(
     if github_url is not None:
         user.github_url = github_url or None
     if avatar is not None and avatar.filename:
-        user.avatar = storage.save_avatar(user.id, avatar)
+        cos = storage_config.cos_params(db)
+        saved = storage.save_avatar(user.id, avatar, cos)
+        if saved["path"]:
+            # 换头像时清掉旧的，避免堆积
+            storage.delete_file(user.avatar, user.avatar_storage or "local", cos)
+            user.avatar = saved["path"]
+            user.avatar_storage = saved["storage"]
     db.commit()
     db.refresh(user)
-    return user
+    return user_out(user)
 
 
 @router.post("/change-password")

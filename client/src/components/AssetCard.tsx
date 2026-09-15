@@ -1,11 +1,11 @@
 import { Card, Space, Tag, Typography } from 'antd'
 import { FileOutlined, LikeOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { assetPath, thumbUrl } from '../api'
+import { assetPath } from '../api'
 import type { Asset } from '../types'
 
 export default function AssetCard({ asset }: { asset: Asset }) {
-  const cover = thumbUrl(asset.cover_thumbnail)
+  const cover = asset.cover_thumbnail_url || null
 
   return (
     <Link to={assetPath(asset)}>
