@@ -110,6 +110,8 @@ cd server
 - ✅ 主页**广场**：按热度值推荐 6 个公开项目（默认排除自己的项目，避免与「我的项目」重复）
 - ✅ **更新热力图**：个人主页与项目主页各一张，GitHub 风格展示最近一年，
   右侧可切换到具体年份、点击某天可看当天全部更新（个人主页带更新日志列表）
+- ✅ **排行榜**：主页「活跃排行」（全局用户按上传版本数）与项目页「贡献排行」（项目内成员），
+  均可切换 **7 天 / 30 天 / 365 天**
 - ✅ 管理后台：用户管理（昵称/角色/启停/软删除）、全部项目管理（含私有项目）、对象存储配置
 
 ## 热度值算法
@@ -163,6 +165,7 @@ cd server
 |---|---|
 | 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
 | 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `.../activity`（热力图，可带 `year`）· `.../updates`（更新日志，可带 `date`）· `GET /users/{id}` |
+| 排行榜 | `GET /leaderboard?days=7\|30\|365`（全局活跃榜）· `GET /projects/{id}/leaderboard?days=`（项目贡献榜） |
 | 项目 | `POST/GET /projects` · `GET /projects/plaza`（广场热度榜）· `GET /projects/{id}/activity`（热力图）· `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
@@ -216,6 +219,18 @@ COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模�
 > 「上传新版本」不再提供缩略图选项——图片版本会自动派生，非图片格式的预览则回落到资产封面。
 > 后端接口仍保留可选的 `thumbnail` 字段（旧数据与 API 兼容）。
 
+## 主页的可见性规则
+
+别人看某个用户的个人主页时：
+
+- **统计数字是完整的**（上传资产 / 涉及项目 / 版本总数），不因访问者权限而缩水
+- **公开项目正常展示**（含其中的资产卡片）
+- **私有项目**：若访问者不是所有者/成员，只显示一条「私有 · 该更新为私有仓库」占位，
+  不暴露项目名与资产；更新日志里对应的记录同样只给占位
+- **热力图**：按天的时间分布照常展示（与「统计完整」一致），点进某天看到的日志里私有部分仍是占位
+
+同样地，全局「活跃排行」只统计访问者有权看到的项目，避免把别人私有项目里的活跃度暴露出来。
+
 ## 数据库迁移
 
 项目未使用 Alembic。新表由 `Base.metadata.create_all` 自动创建；已存在的表新增列由
@@ -223,7 +238,6 @@ COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模�
 历史项目缺少的 slug 由 `backfill_slugs()` 按拼音补全。
 
 ## 删除用户是软删除
-
 `DELETE /admin/users/{id}` **不会真的删库**，只在 `users.deleted_at` 打一个时间戳
 （同时把 `status` 置为 `disabled`）。原因是资产、评论、版本等都外键引用用户，
 真删会破坏历史数据的可读性。

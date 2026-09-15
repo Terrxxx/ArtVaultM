@@ -29,7 +29,8 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
-import type { Project } from '../types'
+import type { LeaderboardItem, Project } from '../types'
+import Leaderboard from '../components/Leaderboard'
 import { useAuthStore } from '../store'
 
 const SYSTEM_CATEGORY_HINT = '模型、贴图与材质、动画、特效、音频、UI与图标、场景、概念设计、其他'
@@ -38,6 +39,9 @@ export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
   const [plaza, setPlaza] = useState<Project[]>([])
   const [archived, setArchived] = useState(false)
+  const [rankDays, setRankDays] = useState(30)
+  const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
+  const [rankLoading, setRankLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -66,6 +70,20 @@ export default function ProjectList() {
   useEffect(() => {
     load()
   }, [load])
+
+  // 活跃排行（按时间窗口）
+  useEffect(() => {
+    let alive = true
+    setRankLoading(true)
+    api
+      .getLeaderboard(rankDays)
+      .then((r) => alive && setRankItems(r.items))
+      .catch(() => alive && setRankItems([]))
+      .finally(() => alive && setRankLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [rankDays])
 
   const onCreate = async (values: any) => {
     setSubmitting(true)
@@ -219,6 +237,22 @@ export default function ProjectList() {
               <Row gutter={[16, 16]}>{plaza.map(renderCard)}</Row>
             </div>
           )}
+
+          <Card
+            title="活跃排行"
+            extra={
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                按上传版本数
+              </Typography.Text>
+            }
+          >
+            <Leaderboard
+              items={rankItems}
+              days={rankDays}
+              onDaysChange={setRankDays}
+              loading={rankLoading}
+            />
+          </Card>
         </Space>
       )}
 

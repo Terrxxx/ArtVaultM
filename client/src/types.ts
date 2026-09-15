@@ -151,10 +151,12 @@ export interface UserProfile {
   user: UserBrief
   stats: { asset_count: number; project_count: number; version_count: number }
   projects: {
-    project_id: number
-    project_name: string
+    project_id: number | null
+    project_name: string | null
     github_repo_url?: string | null
     assets: Asset[]
+    /** true 表示私有项目且访问者无权查看，仅占位 */
+    restricted?: boolean
   }[]
 }
 
@@ -182,18 +184,30 @@ export interface ActivityItem {
   count: number
 }
 
-/** 更新日志的一条记录 */
+/** 更新日志的一条记录（restricted=true 表示私有仓库，仅占位） */
 export interface UpdateItem {
+  restricted?: boolean
   version_id: number
-  version: number
+  version?: number | null
   changelog?: string | null
   file_name?: string | null
   created_at?: string | null
-  asset_id: number
+  asset_id?: number | null
   asset_name?: string | null
   project_id?: number | null
   project_name?: string | null
   uploader?: UserBrief | null
+}
+
+/** 排行榜条目 */
+export interface LeaderboardItem {
+  user: UserBrief
+  count: number
+}
+
+export interface LeaderboardResponse {
+  days: number
+  items: LeaderboardItem[]
 }
 
 /** 活跃度接口返回：可选年份 + 该区间的按天计数（year 为 'recent' 或年份） */

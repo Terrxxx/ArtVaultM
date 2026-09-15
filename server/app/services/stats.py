@@ -11,7 +11,16 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import Asset, AssetVersion, Category, DownloadLog
+from ..models import (
+    Asset,
+    AssetVersion,
+    Category,
+    DownloadLog,
+    Project,
+    ProjectMember,
+    User,
+)
+from ..serializers import user_brief
 from . import storage
 
 # 热度权重
@@ -159,6 +168,67 @@ def daily_counts(
     return [{"date": str(d), "count": int(c)} for d, c in rows]
 
 
+def uploader_ranking(
+    db: Session,
+    days: int,
+    project_id: Optional[int] = None,
+    visible_project_ids: Optional[List[int]] = None,
+    limit: int = 10,
+) -> List[dict]:
+    """按上传版本数给用户排名。
+
+    - project_id 指定时只统计该项目（项目内贡献榜）
+    - visible_project_ids 为 None 表示不限；否则只统计这些项目（避免泄露私有项目活跃度）
+    """
+    since = datetime.utcnow() - timedelta(days=days)
+
+    query = (
+        db.query(AssetVersion.uploader_id, func.count(AssetVersion.id).label("n"))
+        .join(Asset, Asset.id == AssetVersion.asset_id)
+        .filter(AssetVersion.created_at >= since)
+    )
+    if project_id is not None:
+        query = query.filter(Asset.project_id == project_id)
+    elif visible_project_ids is not None:
+        query = query.filter(Asset.project_id.in_(visible_project_ids or [-1]))
+
+    rows = (
+        query.group_by(AssetVersion.uploader_id)
+        .order_by(func.count(AssetVersion.id).desc())
+        .limit(max(1, min(limit, 50)))
+        .all()
+    )
+
+    result = []
+    for uploader_id, count in rows:
+        user = db.get(User, uploader_id)
+        if user is None or user.deleted_at is not None:
+            continue
+        result.append({"user": user_brief(user), "count": int(count)})
+    return result
+
+
+def project_ids_visible_to(db: Session, viewer: User) -> Optional[List[int]]:
+    """访问者能看到的项目 id 列表；None 表示不受限（管理员）。
+
+    「能看到」= 公开项目，或自己拥有/受邀加入的，或管理员。
+    """
+    if viewer.role in ("admin", "super_admin"):
+        return None
+
+    member_ids = {
+        m.project_id
+        for m in db.query(ProjectMember)
+        .filter(ProjectMember.user_id == viewer.id, ProjectMember.status == "accepted")
+        .all()
+    }
+    owned_ids = {p.id for p in db.query(Project).filter(Project.owner_id == viewer.id).all()}
+    public_ids = {
+        p.id for p in db.query(Project).filter(Project.visibility == "public").all()
+    }
+    return list(member_ids | owned_ids | public_ids)
+
+
 def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
 
@@ -169,8 +239,13 @@ def update_log(
     on_date: Optional[date] = None,
     project_id: Optional[int] = None,
     user_id: Optional[int] = None,
+    visible_project_ids: Optional[List[int]] = None,
 ) -> List[dict]:
-    """更新记录列表：某一天全部更新，或最近若干条。"""
+    """更新记录列表：某一天全部更新，或最近若干条。
+
+    visible_project_ids 非 None 时，落在其外的记录只回一个「私有仓库」占位，
+    不暴露资产名与项目名。
+    """
     query = _base_version_query(db, project_id, user_id)
 
     if on_date is not None:
@@ -184,12 +259,40 @@ def update_log(
         query.order_by(AssetVersion.created_at.desc()).limit(max(1, min(limit, 200))).all()
     )
 
+    visible = None if visible_project_ids is None else set(visible_project_ids)
+
     result = []
     for v in rows:
         asset = v.asset
         project = asset.project if asset else None
+        uploader = (
+            {
+                "id": v.uploader.id,
+                "username": v.uploader.username,
+                "nickname": v.uploader.nickname,
+                "avatar_url": storage.display_url(
+                    v.uploader.avatar, v.uploader.avatar_storage or "local"
+                ),
+            }
+            if v.uploader
+            else None
+        )
+
+        if visible is not None and (asset is None or asset.project_id not in visible):
+            # 私有项目：只提示，不暴露细节
+            result.append(
+                {
+                    "restricted": True,
+                    "version_id": v.id,
+                    "created_at": _iso(v.created_at),
+                    "uploader": uploader,
+                }
+            )
+            continue
+
         result.append(
             {
+                "restricted": False,
                 "version_id": v.id,
                 "version": v.version,
                 "changelog": v.changelog,
@@ -199,16 +302,7 @@ def update_log(
                 "asset_name": asset.name if asset else None,
                 "project_id": asset.project_id if asset else None,
                 "project_name": project.name if project else None,
-                "uploader": {
-                    "id": v.uploader.id,
-                    "username": v.uploader.username,
-                    "nickname": v.uploader.nickname,
-                    "avatar_url": storage.display_url(
-                        v.uploader.avatar, v.uploader.avatar_storage or "local"
-                    ),
-                }
-                if v.uploader
-                else None,
+                "uploader": uploader,
             }
         )
     return result

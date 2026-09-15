@@ -26,10 +26,11 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
-import type { ActivityResponse, Asset, Category, Project } from '../types'
+import type { ActivityResponse, Asset, Category, LeaderboardItem, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
+import Leaderboard from '../components/Leaderboard'
 import UploadAssetModal from '../components/UploadAssetModal'
 import { useAuthStore } from '../store'
 
@@ -43,6 +44,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [subscribed, setSubscribed] = useState(false)
   const [activity, setActivity] = useState<ActivityResponse | null>(null)
   const [year, setYear] = useState<string | number>(RECENT)
+  const [rankDays, setRankDays] = useState(30)
+  const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
+  const [rankLoading, setRankLoading] = useState(true)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -83,6 +87,20 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       alive = false
     }
   }, [project.id, year])
+
+  // 贡献排行（按时间窗口）
+  useEffect(() => {
+    let alive = true
+    setRankLoading(true)
+    api
+      .getProjectLeaderboard(project.id, rankDays)
+      .then((r) => alive && setRankItems(r.items))
+      .catch(() => alive && setRankItems([]))
+      .finally(() => alive && setRankLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [project.id, rankDays])
 
   // 编辑项目：仅创建者本人或高级管理员
   const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
@@ -197,6 +215,23 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             ))}
           </Row>
         )}
+
+        <Card
+          title="贡献排行"
+          extra={
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              按上传版本数
+            </Typography.Text>
+          }
+        >
+          <Leaderboard
+            items={rankItems}
+            days={rankDays}
+            onDaysChange={setRankDays}
+            loading={rankLoading}
+            emptyText="这段时间还没有贡献"
+          />
+        </Card>
 
         <Card title="更新热力图">
           <Heatmap

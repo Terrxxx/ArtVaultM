@@ -9,6 +9,7 @@ import type {
   Comment,
   DownloadStats,
   Invitation,
+  LeaderboardResponse,
   Notification,
   Project,
   ProjectMember,
@@ -215,6 +216,19 @@ export const api = {
   deleteUser: (id: number) => client.delete<User>(`/admin/users/${id}`).then((r) => r.data),
   listAllProjects: (archived = false) =>
     client.get<AdminProject[]>('/admin/projects', { params: { archived } }).then((r) => r.data),
+
+  // ---------- 排行榜 ----------
+  /** 全局活跃榜：7/30/365 天内上传版本最多的用户 */
+  getLeaderboard: (days = 30, limit = 10) =>
+    client
+      .get<LeaderboardResponse>('/leaderboard', { params: { days, limit } })
+      .then((r) => r.data),
+  getProjectLeaderboard: (projectId: number, days = 30, limit = 10) =>
+    client
+      .get<LeaderboardResponse>(`/projects/${projectId}/leaderboard`, {
+        params: { days, limit },
+      })
+      .then((r) => r.data),
 
   // ---------- 对象存储配置（仅高级管理员） ----------
   getStorageConfig: () =>

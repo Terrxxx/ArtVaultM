@@ -7,9 +7,16 @@ from ..database import get_db
 from ..models import Asset, User
 from ..serializers import asset_to_dict, user_brief
 from ..services import stats
-from .deps import get_current_user, viewable_project_ids
+from .deps import get_current_user
 
 router = APIRouter()
+
+# 排行榜可选的时间窗口
+RANK_WINDOWS = (7, 30, 365)
+
+
+def _parse_days(days: int) -> int:
+    return days if days in RANK_WINDOWS else 30
 
 
 @router.get("/users/search")
@@ -31,6 +38,29 @@ def search_users(
     return [user_brief(u) for u in users]
 
 
+@router.get("/leaderboard")
+def uploader_leaderboard(
+    days: int = 30,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """全局活跃榜：7/30/365 天内上传版本最多的用户。
+
+    只统计当前访问者有权看到的项目，避免把别人私有项目里的活跃度暴露出来。
+    """
+    window = _parse_days(days)
+    return {
+        "days": window,
+        "items": stats.uploader_ranking(
+            db,
+            days=window,
+            visible_project_ids=stats.project_ids_visible_to(db, user),
+            limit=limit,
+        ),
+    }
+
+
 def _get_active_user(db: Session, **filters) -> User:
     """按条件取用户；已软删除的视为不存在。"""
     target = db.query(User).filter_by(**filters).first()
@@ -40,21 +70,32 @@ def _get_active_user(db: Session, **filters) -> User:
 
 
 def _profile_payload(db: Session, target: User, viewer: User) -> dict:
-    """该用户在哪些项目里上传了哪些资产。"""
-    assets = (
+    """该用户在哪些项目里上传了哪些资产。
+
+    统计数字是**完整**的（不因访问者权限而缩水）；
+    展示部分按访问者权限过滤，无权查看的私有项目只给占位。
+    """
+    all_assets = (
         db.query(Asset)
         .filter(Asset.created_by == target.id)
         .order_by(Asset.created_at.desc())
         .all()
     )
 
-    # 只展示当前访问者有权看到的项目
-    allowed = viewable_project_ids(db, viewer)
-    if allowed is not None:
-        assets = [a for a in assets if a.project_id in allowed]
+    complete_stats = {
+        "asset_count": len(all_assets),
+        "project_count": len({a.project_id for a in all_assets}),
+        "version_count": sum(len(a.versions) for a in all_assets),
+    }
+
+    visible = stats.project_ids_visible_to(db, viewer)  # None = 不受限
 
     grouped: dict = {}
-    for a in assets:
+    restricted_ids = set()
+    for a in all_assets:
+        if visible is not None and a.project_id not in visible:
+            restricted_ids.add(a.project_id)
+            continue
         bucket = grouped.setdefault(a.project_id, {"project": a.project, "assets": []})
         bucket["assets"].append(asset_to_dict(a, current_user_id=viewer.id))
 
@@ -64,19 +105,24 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
             "project_name": b["project"].name if b["project"] else "",
             "github_repo_url": b["project"].github_repo_url if b["project"] else None,
             "assets": b["assets"],
+            "restricted": False,
         }
         for pid, b in grouped.items()
     ]
 
-    return {
-        "user": user_brief(target),
-        "stats": {
-            "asset_count": len(assets),
-            "project_count": len(projects),
-            "version_count": sum(len(a.versions) for a in assets),
-        },
-        "projects": projects,
-    }
+    # 无权查看的私有项目：不暴露名称，只给占位
+    for _pid in sorted(restricted_ids):
+        projects.append(
+            {
+                "project_id": None,
+                "project_name": None,
+                "github_repo_url": None,
+                "assets": [],
+                "restricted": True,
+            }
+        )
+
+    return {"user": user_brief(target), "stats": complete_stats, "projects": projects}
 
 
 @router.get("/users/by-username/{username}/activity")
@@ -90,11 +136,8 @@ def user_activity_by_username(
     target = _get_active_user(db, username=username)
     years = stats.activity_years(db, user_id=target.id)
     chosen = stats.normalize_year(year, years)
-    return {
-        "years": years,
-        "year": chosen,
-        "days": stats.daily_counts(db, chosen, user_id=target.id),
-    }
+    payload = stats.daily_counts(db, chosen, user_id=target.id)
+    return {"years": years, "year": chosen, "days": payload}
 
 
 @router.get("/users/by-username/{username}/updates")
@@ -105,12 +148,21 @@ def user_updates_by_username(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """个人更新日志：给了 date 就返回当天全部更新，否则返回最近若干条。"""
+    """个人更新日志：给了 date 就返回当天全部更新，否则返回最近若干条。
+
+    落在访问者无权查看的私有项目里的更新，只回「私有仓库」占位。
+    """
     target = _get_active_user(db, username=username)
     on_date = stats.parse_date(date_str)
     return {
         "date": date_str if on_date else None,
-        "items": stats.update_log(db, limit=limit, on_date=on_date, user_id=target.id),
+        "items": stats.update_log(
+            db,
+            limit=limit,
+            on_date=on_date,
+            user_id=target.id,
+            visible_project_ids=stats.project_ids_visible_to(db, user),
+        ),
     }
 
 

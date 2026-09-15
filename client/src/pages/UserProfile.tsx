@@ -131,31 +131,41 @@ export default function UserProfilePage() {
         <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 40 }} />
       ) : (
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
-          {projects.map((p) => (
-            <Card
-              key={p.project_id}
-              title={
-                <Space size={10}>
-                  {/* /projects/:id 会自动重定向到规范地址 */}
-                  <Link to={`/projects/${p.project_id}`}>{p.project_name}</Link>
-                  <Tag>{p.assets.length} 个资产</Tag>
-                  {p.github_repo_url && (
-                    <a href={p.github_repo_url} target="_blank" rel="noreferrer">
-                      <GithubOutlined />
-                    </a>
-                  )}
+          {projects.map((p, idx) =>
+            p.restricted ? (
+              // 私有项目且访问者无权查看：只提示，不暴露项目名与资产
+              <Card key={`restricted-${idx}`} size="small">
+                <Space size={8}>
+                  <Tag>私有</Tag>
+                  <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
                 </Space>
-              }
-            >
-              <Row gutter={[16, 16]}>
-                {p.assets.map((a) => (
-                  <Col xs={24} sm={12} lg={6} key={a.id}>
-                    <AssetCard asset={a} />
-                  </Col>
-                ))}
-              </Row>
-            </Card>
-          ))}
+              </Card>
+            ) : (
+              <Card
+                key={p.project_id ?? idx}
+                title={
+                  <Space size={10}>
+                    {/* /projects/:id 会自动重定向到规范地址 */}
+                    <Link to={`/projects/${p.project_id}`}>{p.project_name}</Link>
+                    <Tag>{p.assets.length} 个资产</Tag>
+                    {p.github_repo_url && (
+                      <a href={p.github_repo_url} target="_blank" rel="noreferrer">
+                        <GithubOutlined />
+                      </a>
+                    )}
+                  </Space>
+                }
+              >
+                <Row gutter={[16, 16]}>
+                  {p.assets.map((a) => (
+                    <Col xs={24} sm={12} lg={6} key={a.id}>
+                      <AssetCard asset={a} />
+                    </Col>
+                  ))}
+                </Row>
+              </Card>
+            ),
+          )}
         </Space>
       )}
     </div>

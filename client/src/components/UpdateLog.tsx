@@ -60,43 +60,73 @@ export default function UpdateLog({
             />
           ),
         }}
-        renderItem={(it) => (
-          <List.Item style={{ padding: '10px 0' }}>
-            <List.Item.Meta
-              avatar={
-                <Link to={userPath(it.uploader)}>
-                  <Avatar size="small" icon={<UserOutlined />} src={it.uploader?.avatar_url || undefined} />
-                </Link>
-              }
-              title={
-                <Space size={8} wrap>
-                  <Typography.Text strong>{it.asset_name || '资产'}</Typography.Text>
-                  <Tag color="green">v{it.version}</Tag>
-                  {showProject && it.project_name && (
+        renderItem={(it) => {
+          if (it.restricted) {
+            // 私有项目：不暴露资产名与项目名
+            return (
+              <List.Item style={{ padding: '10px 0' }}>
+                <List.Item.Meta
+                  avatar={
+                    <Avatar
+                      size="small"
+                      icon={<UserOutlined />}
+                      src={it.uploader?.avatar_url || undefined}
+                    />
+                  }
+                  title={
+                    <Space size={8}>
+                      <Tag>私有</Tag>
+                      <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
+                    </Space>
+                  }
+                  description={
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      @ {it.project_name}
+                      {fmtTime(it.created_at)}
                     </Typography.Text>
-                  )}
-                </Space>
-              }
-              description={
-                <Space direction="vertical" size={2}>
-                  {it.changelog && <Typography.Text>{it.changelog}</Typography.Text>}
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {it.uploader ? (
-                      <Link to={userPath(it.uploader)}>
-                        {it.uploader.nickname || it.uploader.username}
-                      </Link>
-                    ) : (
-                      '未知'
-                    )}{' '}
-                    · {fmtTime(it.created_at)}
-                  </Typography.Text>
-                </Space>
-              }
-            />
-          </List.Item>
-        )}
+                  }
+                />
+              </List.Item>
+            )
+          }
+
+          return (
+            <List.Item style={{ padding: '10px 0' }}>
+              <List.Item.Meta
+                avatar={
+                  <Link to={userPath(it.uploader)}>
+                    <Avatar size="small" icon={<UserOutlined />} src={it.uploader?.avatar_url || undefined} />
+                  </Link>
+                }
+                title={
+                  <Space size={8} wrap>
+                    <Typography.Text strong>{it.asset_name || '资产'}</Typography.Text>
+                    <Tag color="green">v{it.version}</Tag>
+                    {showProject && it.project_name && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        @ {it.project_name}
+                      </Typography.Text>
+                    )}
+                  </Space>
+                }
+                description={
+                  <Space direction="vertical" size={2}>
+                    {it.changelog && <Typography.Text>{it.changelog}</Typography.Text>}
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {it.uploader ? (
+                        <Link to={userPath(it.uploader)}>
+                          {it.uploader.nickname || it.uploader.username}
+                        </Link>
+                      ) : (
+                        '未知'
+                      )}{' '}
+                      · {fmtTime(it.created_at)}
+                    </Typography.Text>
+                  </Space>
+                }
+              />
+            </List.Item>
+          )
+        }}
       />
     </div>
   )

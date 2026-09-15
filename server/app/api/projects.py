@@ -173,6 +173,25 @@ def project_activity(
     }
 
 
+@router.get("/projects/{project_id}/leaderboard")
+def project_leaderboard(
+    project_id: int,
+    days: int = 30,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """项目内贡献榜：7/30/365 天内为该项目上传版本最多的成员。"""
+    ensure_project_access(db, project_id, user)
+    window = days if days in (7, 30, 365) else 30
+    return {
+        "days": window,
+        "items": stats.uploader_ranking(
+            db, days=window, project_id=project_id, limit=limit
+        ),
+    }
+
+
 @router.get("/projects/{project_id}")
 def get_project(
     project_id: int,
