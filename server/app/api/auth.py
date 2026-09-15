@@ -46,7 +46,8 @@ def update_profile(
         user.github_url = github_url or None
     if avatar is not None and avatar.filename:
         cos = storage_config.cos_params(db)
-        saved = storage.save_avatar(user.id, avatar, cos)
+        raw, name = storage.read_upload(avatar)
+        saved = storage.save_avatar(user.id, raw, name, cos)
         if saved["path"]:
             # 换头像时清掉旧的，避免堆积
             storage.delete_file(user.avatar, user.avatar_storage or "local", cos)

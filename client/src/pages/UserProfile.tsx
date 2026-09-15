@@ -1,32 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
-import type { ActivityItem, UserProfile } from '../types'
+import type { ActivityResponse, UpdateItem, UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
-import Heatmap from '../components/Heatmap'
+import Heatmap, { RECENT } from '../components/Heatmap'
+import UpdateLog from '../components/UpdateLog'
 
 export default function UserProfilePage() {
   // 路由为 /{用户名}
   const { username } = useParams()
+  const key = String(username)
+
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [activity, setActivity] = useState<ActivityResponse | null>(null)
+  const [year, setYear] = useState<string | number>(RECENT)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [updates, setUpdates] = useState<UpdateItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingUpdates, setLoadingUpdates] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // 资料 + 热力图
   useEffect(() => {
     let alive = true
     setLoading(true)
     setError(null)
     Promise.all([
-      api.getUserProfileByUsername(String(username)),
-      api.getUserActivity(String(username)).catch(() => ({ items: [] })),
+      api.getUserProfileByUsername(key),
+      api.getUserActivity(key, year).catch(() => null),
     ])
       .then(([p, act]) => {
         if (!alive) return
         setProfile(p)
-        setActivity(act.items)
+        setActivity(act)
       })
       .catch((e) => {
         if (alive) setError(e.response?.data?.detail || '用户不存在')
@@ -37,7 +45,24 @@ export default function UserProfilePage() {
     return () => {
       alive = false
     }
-  }, [username])
+  }, [key, year])
+
+  // 更新日志：选中某天看当天，否则看最近若干条
+  const loadUpdates = useCallback(async () => {
+    setLoadingUpdates(true)
+    try {
+      const r = await api.getUserUpdates(key, selectedDate, 20)
+      setUpdates(r.items)
+    } catch {
+      setUpdates([])
+    } finally {
+      setLoadingUpdates(false)
+    }
+  }, [key, selectedDate])
+
+  useEffect(() => {
+    loadUpdates()
+  }, [loadUpdates])
 
   if (loading) {
     return (
@@ -79,11 +104,31 @@ export default function UserProfilePage() {
       </Card>
 
       <Card title="更新热力图" style={{ marginBottom: 20 }}>
-        <Heatmap items={activity} />
+        <Heatmap
+          days={activity?.days || []}
+          years={activity?.years || []}
+          value={year}
+          onChange={(v) => {
+            setYear(v)
+            setSelectedDate(null)
+          }}
+          selectedDate={selectedDate}
+          onSelectDay={(d) => setSelectedDate((prev) => (prev === d ? null : d))}
+          loading={loading}
+        />
+        <div style={{ marginTop: 20, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+          <UpdateLog
+            items={updates}
+            date={selectedDate}
+            onClearDate={() => setSelectedDate(null)}
+            loading={loadingUpdates}
+            showProject
+          />
+        </div>
       </Card>
 
       {projects.length === 0 ? (
-        <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 60 }} />
+        <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 40 }} />
       ) : (
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
           {projects.map((p) => (

@@ -18,9 +18,9 @@ THUMB_MAX_EDGE = 512
 THUMB_TARGET_BYTES = 10 * 1024
 THUMB_QUALITIES = (82, 74, 66, 58, 50, 42, 34, 26, 20)
 
-# 版本列表用的小图：固定 56x56 正方形，尽量压小
-SMALL_THUMB_EDGE = 56
-SMALL_THUMB_TARGET_BYTES = 4 * 1024
+# 版本列表等紧凑场景用的资产小图
+SMALL_THUMB_EDGE = 42
+SMALL_THUMB_TARGET_BYTES = 3 * 1024
 SMALL_QUALITIES = (70, 60, 50, 40, 30)
 
 # 图片展示链接的有效期（头像/缩略图会随页面一起加载）
@@ -111,13 +111,23 @@ def _square(img, size: int):
     return cropped.resize((size, size), Image.LANCZOS)
 
 
-def prepare_thumbnails(file: UploadFile) -> dict:
-    """只读一次上传流，产出主图与 56×56 小图。
+def read_upload(file: Optional[UploadFile]) -> tuple:
+    """把上传文件读成 (bytes, 安全文件名)；无文件返回 (None, None)。
+
+    上传流只能读一次，因此需要多次处理的场景（如封面同时要主图和小图）
+    先读一次再把字节传给各个保存函数。
+    """
+    if file is None or not getattr(file, "filename", None):
+        return None, None
+    return file.file.read(), _safe_name(file.filename)
+
+
+def prepare_thumbnails(raw: bytes) -> dict:
+    """产出主图与 42×42 小图。
 
     返回 {"main": bytes|None, "small": bytes|None, "raw": bool}
     raw=True 表示不是可解码的图片，main 里是原始字节、small 为 None。
     """
-    raw = file.file.read()
     if not raw:
         return {"main": None, "small": None, "raw": False}
 
@@ -156,9 +166,7 @@ def _empty_slot() -> dict:
     return {"path": None, "storage": "local"}
 
 
-def _store_image(
-    data: Optional[bytes], key_base: str, file: UploadFile, cos: Optional[dict]
-) -> dict:
+def _store_image(data: Optional[bytes], key_base: str, cos: Optional[dict]) -> dict:
     """把图片字节落库；无数据返回空槽。"""
     if not data:
         return _empty_slot()
@@ -168,22 +176,45 @@ def _store_image(
     }
 
 
-def save_version_thumbnails(
-    asset_id: int, version: int, file: Optional[UploadFile], cos: Optional[dict] = None
-) -> dict:
-    """保存某个版本的主缩略图与 56×56 小图。
+# 可由 PIL 解码、能用来派生封面的格式（其余如 fbx/psd 不必读入内存）
+DERIVABLE_FORMATS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif"}
 
+
+def derive_cover_from_file(
+    asset_id: int,
+    raw: Optional[bytes],
+    filename: Optional[str],
+    cos: Optional[dict] = None,
+) -> Optional[dict]:
+    """资产文件本身就是图片时，直接用它派生封面，省去重复上传缩略图。
+
+    不是可解码的图片就返回 None。
+    """
+    if not raw or not filename or _load_image(raw) is None:
+        return None
+    return save_asset_cover(asset_id, raw, filename, cos)
+
+
+def save_asset_cover(
+    asset_id: int,
+    raw: Optional[bytes],
+    filename: Optional[str],
+    cos: Optional[dict] = None,
+) -> dict:
+    """保存资产封面：主图（最长边 512、<10KB WebP）+ 42×42 小图。
+
+    小图由封面自动派生，用户不需要额外上传。
     返回 {"main": {path, storage}, "small": {path, storage}}
     """
-    if file is None or not file.filename:
+    if not raw or not filename:
         return {"main": _empty_slot(), "small": _empty_slot()}
 
-    prepared = prepare_thumbnails(file)
-    stem = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}"
+    prepared = prepare_thumbnails(raw)
+    stem = f"thumbnails/asset{asset_id}_{uuid.uuid4().hex[:8]}"
 
     if prepared["raw"]:
-        # 非图片：主图原样存（保留原扩展名），不生成 1:1 小图
-        ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
+        # 非图片：封面原样存，不派生小图
+        ext = os.path.splitext(filename)[1] or ".bin"
         stored = _put_bytes(
             prepared["main"], f"{stem}{ext}", "application/octet-stream", cos
         )
@@ -193,31 +224,60 @@ def save_version_thumbnails(
         }
 
     return {
-        "main": _store_image(prepared["main"], stem, file, cos),
-        "small": _store_image(prepared["small"], f"{stem}_s56", file, cos),
+        "main": _store_image(prepared["main"], stem, cos),
+        "small": _store_image(prepared["small"], f"{stem}_s42", cos),
     }
 
 
-def save_avatar(
-    user_id: int, file: Optional[UploadFile], cos: Optional[dict] = None
+def save_version_thumbnail(
+    asset_id: int,
+    version: int,
+    raw: Optional[bytes],
+    filename: Optional[str],
+    cos: Optional[dict] = None,
 ) -> dict:
-    """保存用户头像（压缩为 webp），返回 {path, storage}。"""
-    if file is None or not file.filename:
+    """保存某个版本的缩略图（仅主图，用于版本预览），返回 {path, storage}。"""
+    if not raw or not filename:
         return _empty_slot()
 
-    prepared = prepare_thumbnails(file)
-    stem = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}"
+    prepared = prepare_thumbnails(raw)
+    stem = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}"
 
-    if prepared["raw"] or not prepared["main"]:
+    if prepared["raw"]:
         if not prepared["main"]:
             return _empty_slot()
-        ext = os.path.splitext(_safe_name(file.filename))[1] or ".bin"
+        ext = os.path.splitext(filename)[1] or ".bin"
         stored = _put_bytes(
             prepared["main"], f"{stem}{ext}", "application/octet-stream", cos
         )
         return {"path": stored, "storage": "cos" if cos else "local"}
 
-    return _store_image(prepared["main"], stem, file, cos)
+    return _store_image(prepared["main"], stem, cos)
+
+
+def save_avatar(
+    user_id: int,
+    raw: Optional[bytes],
+    filename: Optional[str],
+    cos: Optional[dict] = None,
+) -> dict:
+    """保存用户头像（压缩为 webp），返回 {path, storage}。"""
+    if not raw or not filename:
+        return _empty_slot()
+
+    prepared = prepare_thumbnails(raw)
+    stem = f"avatars/{user_id}_{uuid.uuid4().hex[:8]}"
+
+    if prepared["raw"] or not prepared["main"]:
+        if not prepared["main"]:
+            return _empty_slot()
+        ext = os.path.splitext(filename)[1] or ".bin"
+        stored = _put_bytes(
+            prepared["main"], f"{stem}{ext}", "application/octet-stream", cos
+        )
+        return {"path": stored, "storage": "cos" if cos else "local"}
+
+    return _store_image(prepared["main"], stem, cos)
 
 
 # ---------- 资产文件 ----------

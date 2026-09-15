@@ -110,18 +110,19 @@ def upload_version(
         )
         deduped = False
 
-    # 每个版本独立保存自己的缩略图（主图 + 版本列表用的 56×56 小图）
-    thumbs = storage.save_version_thumbnails(asset.id, next_version, thumbnail, cos)
+    # 每个版本可以有自己的一张预览缩略图
+    raw_thumb, thumb_name = storage.read_upload(thumbnail)
+    version_thumb = storage.save_version_thumbnail(
+        asset.id, next_version, raw_thumb, thumb_name, cos
+    )
 
     version = AssetVersion(
         asset_id=asset.id,
         version=next_version,
         is_latest=True,
         changelog=changelog,
-        thumbnail=thumbs["main"]["path"],
-        thumbnail_storage=thumbs["main"]["storage"],
-        thumb_small=thumbs["small"]["path"],
-        thumb_small_storage=thumbs["small"]["storage"],
+        thumbnail=version_thumb["path"],
+        thumbnail_storage=version_thumb["storage"],
         storage=placed["storage"],
         file_path=placed["file_path"],
         file_name=staged["file_name"],
@@ -132,9 +133,8 @@ def upload_version(
     )
     db.add(version)
 
-    # 新版本上传了缩略图才替换资产封面，否则保留原封面
-    if thumbs["main"]["path"]:
-        asset.cover_thumbnail = thumbs["main"]["path"]
+    # 说明：资产封面是独立字段，只在创建资产或手动编辑时设置，
+    # 上传新版本不会覆盖它。
 
     summary = f"资产「{asset.name}」发布新版本 v{next_version}"
     # 同时订阅了项目和该资产的用户只发一条，避免重复

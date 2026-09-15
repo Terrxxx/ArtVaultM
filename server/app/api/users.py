@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -80,15 +82,35 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
 @router.get("/users/by-username/{username}/activity")
 def user_activity_by_username(
     username: str,
-    days: int = 180,
+    year: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """个人更新热力图：按天统计该用户上传的版本数。"""
+    """个人更新热力图：year=recent 或某一年，默认最近 12 个月。"""
     target = _get_active_user(db, username=username)
+    years = stats.activity_years(db, user_id=target.id)
+    chosen = stats.normalize_year(year, years)
     return {
-        "days": days,
-        "items": stats.daily_version_counts(db, days=days, user_id=target.id),
+        "years": years,
+        "year": chosen,
+        "days": stats.daily_counts(db, chosen, user_id=target.id),
+    }
+
+
+@router.get("/users/by-username/{username}/updates")
+def user_updates_by_username(
+    username: str,
+    date_str: Optional[str] = Query(None, alias="date"),
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """个人更新日志：给了 date 就返回当天全部更新，否则返回最近若干条。"""
+    target = _get_active_user(db, username=username)
+    on_date = stats.parse_date(date_str)
+    return {
+        "date": date_str if on_date else None,
+        "items": stats.update_log(db, limit=limit, on_date=on_date, user_id=target.id),
     }
 
 

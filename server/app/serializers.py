@@ -39,10 +39,6 @@ def version_to_dict(v: AssetVersion) -> dict:
         "file_hash": v.file_hash,
         "thumbnail": v.thumbnail,
         "thumbnail_url": storage.display_url(v.thumbnail, v.thumbnail_storage or "local"),
-        "thumb_small": v.thumb_small,
-        "thumb_small_url": storage.display_url(
-            v.thumb_small, v.thumb_small_storage or "local"
-        ),
         "changelog": v.changelog,
         "is_latest": v.is_latest,
         "download_count": len(v.downloads),
@@ -61,13 +57,12 @@ def asset_to_dict(
     if latest is None and a.versions:
         latest = a.versions[0]
 
-    # 封面来自某个版本的缩略图，反查它的存储位置（本地 / COS）
-    cover_storage = "local"
-    if a.cover_thumbnail:
-        for v in a.versions:
-            if v.thumbnail == a.cover_thumbnail:
-                cover_storage = v.thumbnail_storage or "local"
-                break
+    # 封面是资产级字段，始终展示它；没有设置时回落到最新版本的缩略图
+    cover_path = a.cover_thumbnail
+    cover_storage = a.cover_thumbnail_storage or "local"
+    if not cover_path and latest is not None and latest.thumbnail:
+        cover_path = latest.thumbnail
+        cover_storage = latest.thumbnail_storage or "local"
 
     data = {
         "id": a.id,
@@ -77,7 +72,11 @@ def asset_to_dict(
         "description": a.description,
         "tags": a.tags or [],
         "cover_thumbnail": a.cover_thumbnail,
-        "cover_thumbnail_url": storage.display_url(a.cover_thumbnail, cover_storage),
+        "cover_thumbnail_url": storage.display_url(cover_path, cover_storage),
+        # 42×42 资产小图（由封面派生，仅图片资产有）
+        "small_thumbnail_url": storage.display_url(
+            a.small_thumbnail, a.small_thumbnail_storage or "local"
+        ),
         "status": a.status,
         "created_by": a.created_by,
         "creator": user_brief(a.creator),

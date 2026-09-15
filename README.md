@@ -108,8 +108,9 @@ cd server
   所有出现用户的地方都带头像
 - ✅ 下载改为**浏览器原生直链**（不再用 XHR 取 blob），避免跨域访问 COS 被 CORS 拦截，大文件也不占内存
 - ✅ 主页**广场**：按热度值推荐 6 个公开项目（默认排除自己的项目，避免与「我的项目」重复）
-- ✅ **更新热力图**：个人主页与项目主页各一张，参考 GitHub 的按天活跃度格子（近 26 周）
-- ✅ 管理后台：用户管理（昵称/角色/启停）、全部项目管理（含私有项目）、对象存储配置
+- ✅ **更新热力图**：个人主页与项目主页各一张，GitHub 风格展示最近一年，
+  右侧可切换到具体年份、点击某天可看当天全部更新（个人主页带更新日志列表）
+- ✅ 管理后台：用户管理（昵称/角色/启停/软删除）、全部项目管理（含私有项目）、对象存储配置
 
 ## 热度值算法
 
@@ -161,7 +162,7 @@ cd server
 | 分组 | 主要接口 |
 |---|---|
 | 认证 | `POST /auth/login` · `GET /auth/me` · `PATCH /auth/profile`（昵称/GitHub/头像）· `POST /auth/change-password` |
-| 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `GET /users/by-username/{username}/activity`（热力图）· `GET /users/{id}` |
+| 用户 | `GET /users/search?q=` · `GET /users/by-username/{username}`（个人主页）· `.../activity`（热力图，可带 `year`）· `.../updates`（更新日志，可带 `date`）· `GET /users/{id}` |
 | 项目 | `POST/GET /projects` · `GET /projects/plaza`（广场热度榜）· `GET /projects/{id}/activity`（热力图）· `GET /projects/{id}` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
@@ -191,17 +192,27 @@ COS 为签名 URL），由前端交给浏览器原生下载。原因是 COS 模�
 支持的格式：图片 `png/jpg/jpeg/gif/webp/bmp/svg/avif`；视频 `mp4/webm/mov/m4v/ogv`；
 音频 `mp3/wav/ogg/m4a/flac/aac`；3D 模型 `gltf/glb`（three.js，按需加载）。其余格式回落到缩略图。
 
+预览**不是自动播放**：版本历史里点「预览」才在弹窗中打开，内容限制在 `70vh` 以内。
+
 ## 图片处理
 
 上传的图片统一由 Pillow 处理，一次读取产出两档：
 
 | 用途 | 规格 |
 |---|---|
-| 主缩略图（预览、卡片、头像） | 最长边 512，WebP，压到 **10KB** 以内 |
-| 版本列表小图 | 居中裁成正方形后缩到 **56×56**，WebP，约 0.4KB |
+| 资产封面 / 头像（主图） | 最长边 512，WebP，压到 **10KB** 以内 |
+| 版本列表小图 | 资产封面派生的 **42×42** 正方形，WebP，约 80 字节 |
 
 压缩策略：先按质量 82→20 迭代编码，仍超标就把最长边减半再来一轮。
-非图片文件不做处理，原样保存且不生成小图。
+
+**封面是资产级字段**：
+
+- 创建资产时会用上传的缩略图作为封面；**没传缩略图但资产文件本身就是图片**时，
+  直接用文件派生封面（不必重复上传）
+- 上传新版本**不会**覆盖封面
+- 在「编辑资产」里换封面只影响封面，不会动任何版本的缩略图
+
+**版本列表的缩略图**只在资产是图片时显示，用的是上面那张 42×42 小图（所有版本共用）。
 
 ## 数据库迁移
 

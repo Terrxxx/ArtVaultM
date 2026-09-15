@@ -158,15 +158,18 @@ def plaza(
 @router.get("/projects/{project_id}/activity")
 def project_activity(
     project_id: int,
-    days: int = 180,
+    year: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """项目更新热力图：按天统计版本上传次数。"""
+    """项目更新热力图：year=recent 或某一年，默认最近 12 个月。"""
     ensure_project_access(db, project_id, user)
+    years = stats.activity_years(db, project_id=project_id)
+    chosen = stats.normalize_year(year, years)
     return {
-        "days": days,
-        "items": stats.daily_version_counts(db, days=days, project_id=project_id),
+        "years": years,
+        "year": chosen,
+        "days": stats.daily_counts(db, chosen, project_id=project_id),
     }
 
 

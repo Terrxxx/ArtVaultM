@@ -26,8 +26,6 @@ export interface Version {
   file_hash?: string | null
   thumbnail?: string | null
   thumbnail_url?: string | null
-  /** 版本列表用的 56×56 小图 */
-  thumb_small_url?: string | null
   changelog?: string | null
   is_latest: boolean
   download_count: number
@@ -53,6 +51,8 @@ export interface Asset {
   tags: string[]
   cover_thumbnail?: string | null
   cover_thumbnail_url?: string | null
+  /** 资产级 42×42 小图（由封面派生，仅图片资产有），用于版本列表 */
+  small_thumbnail_url?: string | null
   status: string
   created_by: number
   creator?: UserBrief | null
@@ -178,6 +178,27 @@ export type Role = 'member' | 'admin' | 'super_admin'
 export interface ActivityItem {
   date: string
   count: number
+}
+
+/** 更新日志的一条记录 */
+export interface UpdateItem {
+  version_id: number
+  version: number
+  changelog?: string | null
+  file_name?: string | null
+  created_at?: string | null
+  asset_id: number
+  asset_name?: string | null
+  project_id?: number | null
+  project_name?: string | null
+  uploader?: UserBrief | null
+}
+
+/** 活跃度接口返回：可选年份 + 该区间的按天计数（year 为 'recent' 或年份） */
+export interface ActivityResponse {
+  years: number[]
+  year: number | string
+  days: ActivityItem[]
 }
 
 export const ROLE_LABEL: Record<string, string> = {

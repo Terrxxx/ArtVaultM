@@ -98,6 +98,10 @@ class Asset(Base):
     description = Column(String, nullable=True)
     tags = Column(JSON, default=list)
     cover_thumbnail = Column(String, nullable=True)
+    cover_thumbnail_storage = Column(String, default="local")  # local / cos
+    # 资产级 42x42 小图（webp），由封面自动派生，用于版本列表等紧凑场景
+    small_thumbnail = Column(String, nullable=True)
+    small_thumbnail_storage = Column(String, default="local")
     status = Column(String, default="published")
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

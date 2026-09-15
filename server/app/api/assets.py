@@ -129,6 +129,13 @@ def create_asset(
 
     cos = storage_config.cos_params(db)
     staged = storage.stage_upload(file)
+    # 图片资产可能要用文件本身派生封面，且临时文件稍后会被移走，这里先读出来。
+    # 只对图片格式读入内存，避免大模型文件占用。
+    file_bytes = (
+        staged["tmp_path"].read_bytes()
+        if staged["file_format"] in storage.DERIVABLE_FORMATS
+        else None
+    )
     reuse = _find_reusable_version(
         db, project_id, staged["file_hash"], _target_storage(cos), cos
     )
@@ -142,7 +149,17 @@ def create_asset(
         )
         deduped = False
 
-    thumbs = storage.save_version_thumbnails(asset.id, 1, thumbnail, cos)
+    raw_thumb, thumb_name = storage.read_upload(thumbnail)
+    cover = storage.save_asset_cover(asset.id, raw_thumb, thumb_name, cos)
+    version_thumb = storage.save_version_thumbnail(asset.id, 1, raw_thumb, thumb_name, cos)
+
+    # 没单独传封面时，若资产文件本身就是图片，直接拿它派生封面（不必重复上传）
+    if not cover["main"]["path"] and file_bytes:
+        derived = storage.derive_cover_from_file(
+            asset.id, file_bytes, staged["file_name"], cos
+        )
+        if derived:
+            cover = derived
 
     db.add(
         AssetVersion(
@@ -150,10 +167,8 @@ def create_asset(
             version=1,
             is_latest=True,
             changelog=changelog,
-            thumbnail=thumbs["main"]["path"],
-            thumbnail_storage=thumbs["main"]["storage"],
-            thumb_small=thumbs["small"]["path"],
-            thumb_small_storage=thumbs["small"]["storage"],
+            thumbnail=version_thumb["path"],
+            thumbnail_storage=version_thumb["storage"],
             storage=placed["storage"],
             file_path=placed["file_path"],
             file_name=staged["file_name"],
@@ -163,7 +178,10 @@ def create_asset(
             uploader_id=user.id,
         )
     )
-    asset.cover_thumbnail = thumbs["main"]["path"]
+    asset.cover_thumbnail = cover["main"]["path"]
+    asset.cover_thumbnail_storage = cover["main"]["storage"]
+    asset.small_thumbnail = cover["small"]["path"]
+    asset.small_thumbnail_storage = cover["small"]["storage"]
 
     notify.notify_subscribers(
         db,
@@ -226,26 +244,22 @@ def update_asset(
             raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
         asset.category_id = category_id
 
-    # 换封面图：同时更新最新版本的缩略图，保证版本历史显示一致
+    # 换封面：只改资产级封面（含 42×42 小图），不动任何版本的缩略图
     if thumbnail is not None and thumbnail.filename:
         cos = storage_config.cos_params(db)
-        latest = asset.versions[0] if asset.versions else None
-        new_thumbs = storage.save_version_thumbnails(
-            asset.id, latest.version if latest else 1, thumbnail, cos
-        )
-        if new_thumbs["main"]["path"]:
-            if latest:
-                storage.delete_file(
-                    latest.thumbnail, latest.thumbnail_storage or "local", cos
-                )
-                storage.delete_file(
-                    latest.thumb_small, latest.thumb_small_storage or "local", cos
-                )
-                latest.thumbnail = new_thumbs["main"]["path"]
-                latest.thumbnail_storage = new_thumbs["main"]["storage"]
-                latest.thumb_small = new_thumbs["small"]["path"]
-                latest.thumb_small_storage = new_thumbs["small"]["storage"]
-            asset.cover_thumbnail = new_thumbs["main"]["path"]
+        raw, name = storage.read_upload(thumbnail)
+        cover = storage.save_asset_cover(asset.id, raw, name, cos)
+        if cover["main"]["path"]:
+            storage.delete_file(
+                asset.cover_thumbnail, asset.cover_thumbnail_storage or "local", cos
+            )
+            storage.delete_file(
+                asset.small_thumbnail, asset.small_thumbnail_storage or "local", cos
+            )
+            asset.cover_thumbnail = cover["main"]["path"]
+            asset.cover_thumbnail_storage = cover["main"]["storage"]
+            asset.small_thumbnail = cover["small"]["path"]
+            asset.small_thumbnail_storage = cover["small"]["storage"]
 
     db.commit()
     db.refresh(asset)

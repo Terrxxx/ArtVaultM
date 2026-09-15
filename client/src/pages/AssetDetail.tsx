@@ -8,6 +8,7 @@ import {
   Empty,
   List,
   message,
+  Modal,
   Row,
   Space,
   Spin,
@@ -19,6 +20,7 @@ import {
   BellOutlined,
   DownloadOutlined,
   EditOutlined,
+  EyeOutlined,
   FileOutlined,
   LikeFilled,
   LikeOutlined,
@@ -41,11 +43,11 @@ export default function AssetDetail() {
   const { id } = useParams()
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
-  const [previewVersion, setPreviewVersion] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
+  const [previewTarget, setPreviewTarget] = useState<Version | null>(null)
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -76,13 +78,16 @@ export default function AssetDetail() {
   if (!asset) return <Empty />
 
   const versions = asset.versions || []
-  const current = versions.find((v) => v.id === previewVersion) || versions[0]
-  // 优先展示所选版本的缩略图，没有则回落到资产封面
-  const previewSrc = current?.thumbnail_url || asset.cover_thumbnail_url || null
+  // 左上角固定展示资产封面，不随所选版本变化
+  const coverSrc = asset.cover_thumbnail_url || null
   const canWrite = user?.id === asset.created_by || isSuperAdmin(user?.role)
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
-  const canPreview = previewKind(current?.file_format) !== 'none'
+
+  // 只有图片类资产才在版本列表里显示缩略图，且用的是资产级 42×42 小图
+  const latestFormat = asset.latest_version?.file_format
+  const isImageAsset = previewKind(latestFormat) === 'image'
+  const rowThumb = isImageAsset ? asset.small_thumbnail_url || null : null
 
   const toggleLike = async () => {
     const res = await api.toggleLike(assetId)
@@ -107,39 +112,34 @@ export default function AssetDetail() {
         <Row gutter={16}>
           <Col xs={24} md={10}>
             <Card styles={{ body: { padding: 0 } }}>
-              <OnlinePreview
-                version={current || null}
-                assetName={asset.name}
-                fallback={
-                  previewSrc ? (
-                    <img src={previewSrc} alt={asset.name} style={{ width: '100%', display: 'block' }} />
-                  ) : (
-                    <div
-                      style={{
-                        height: 260,
-                        background: '#f0f0f0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#c0c0c0',
-                      }}
-                    >
-                      <FileOutlined style={{ fontSize: 56 }} />
-                    </div>
-                  )
-                }
-              />
+              {coverSrc ? (
+                <img src={coverSrc} alt={asset.name} style={{ width: '100%', display: 'block' }} />
+              ) : (
+                <div
+                  style={{
+                    height: 260,
+                    background: '#f0f0f0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#c0c0c0',
+                  }}
+                >
+                  <FileOutlined style={{ fontSize: 56 }} />
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    暂无封面
+                  </Typography.Text>
+                </div>
+              )}
             </Card>
-            {current && (
-              <Typography.Text
-                type="secondary"
-                style={{ fontSize: 12, display: 'block', marginTop: 6, textAlign: 'center' }}
-              >
-                正在预览 v{current.version}
-                {current.is_latest ? '（最新）' : ''}
-                {!canPreview && ' · 该格式不支持在线预览，展示的是缩略图'}
-              </Typography.Text>
-            )}
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 12, display: 'block', marginTop: 6, textAlign: 'center' }}
+            >
+              资产封面{canWrite ? ' · 可在「编辑资产」中更换' : ''}
+            </Typography.Text>
           </Col>
           <Col xs={24} md={14}>
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -231,100 +231,83 @@ export default function AssetDetail() {
           >
             <List
               dataSource={visibleVersions}
-              renderItem={(v: Version) => {
-                const thumb = v.thumb_small_url || v.thumbnail_url || null
-                const active = current?.id === v.id
-                return (
-                  <List.Item
-                    style={{ background: active ? '#f6f5ff' : undefined, cursor: 'pointer' }}
-                    onClick={() => setPreviewVersion(v.id)}
-                    actions={[
-                      <Button
-                        key="dl"
-                        icon={<DownloadOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          downloadVersion(v.id, v.file_name)
-                        }}
-                      >
-                        下载
-                      </Button>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      avatar={
-                        thumb ? (
-                          <img
-                            src={thumb}
-                            alt={`v${v.version}`}
-                            style={{
-                              width: 56,
-                              height: 56,
-                              objectFit: 'cover',
-                              borderRadius: 4,
-                              border: '1px solid #eee',
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 56,
-                              height: 56,
-                              borderRadius: 4,
-                              background: '#f5f5f5',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#c0c0c0',
-                            }}
-                          >
-                            <FileOutlined style={{ fontSize: 22 }} />
-                          </div>
-                        )
-                      }
-                      title={
-                        <Space wrap>
-                          {v.is_latest && <Tag color="green">最新</Tag>}
-                          <Typography.Text strong>v{v.version}</Typography.Text>
-                          {v.file_format && <Tag>{v.file_format}</Tag>}
-                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            下载 {v.download_count} 次
-                          </Typography.Text>
-                        </Space>
-                      }
-                      description={
-                        <Space direction="vertical" size={2}>
-                          <Typography.Text type="secondary">
-                            {v.file_name} · {formatSize(v.file_size)}
-                          </Typography.Text>
-                          {v.changelog && (
-                            <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
+              renderItem={(v: Version) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="pv"
+                      icon={<EyeOutlined />}
+                      onClick={() => setPreviewTarget(v)}
+                    >
+                      预览
+                    </Button>,
+                    <Button
+                      key="dl"
+                      icon={<DownloadOutlined />}
+                      onClick={() => downloadVersion(v.id, v.file_name)}
+                    >
+                      下载
+                    </Button>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      rowThumb ? (
+                        <img
+                          src={rowThumb}
+                          alt={asset.name}
+                          style={{
+                            width: 42,
+                            height: 42,
+                            objectFit: 'cover',
+                            borderRadius: 4,
+                            border: '1px solid #eee',
+                          }}
+                        />
+                      ) : undefined
+                    }
+                    title={
+                      <Space wrap>
+                        {v.is_latest && <Tag color="green">最新</Tag>}
+                        <Typography.Text strong>v{v.version}</Typography.Text>
+                        {v.file_format && <Tag>{v.file_format}</Tag>}
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          下载 {v.download_count} 次
+                        </Typography.Text>
+                      </Space>
+                    }
+                    description={
+                      <Space direction="vertical" size={2}>
+                        <Typography.Text type="secondary">
+                          {v.file_name} · {formatSize(v.file_size)}
+                        </Typography.Text>
+                        {v.changelog && (
+                          <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
+                        )}
+                        <Space size={6} align="center" style={{ fontSize: 12 }}>
+                          {v.uploader ? (
+                            <Link to={userPath(v.uploader)}>
+                              <Space size={6} align="center">
+                                <Avatar
+                                  size={18}
+                                  icon={<UserOutlined />}
+                                  src={v.uploader.avatar_url || undefined}
+                                />
+                                {v.uploader.nickname || v.uploader.username}
+                              </Space>
+                            </Link>
+                          ) : (
+                            <Typography.Text type="secondary">未知</Typography.Text>
                           )}
-                          <Space size={6} align="center" style={{ fontSize: 12 }}>
-                            {v.uploader ? (
-                              <Link to={userPath(v.uploader)}>
-                                <Space size={6} align="center">
-                                  <Avatar
-                                    size={18}
-                                    icon={<UserOutlined />}
-                                    src={v.uploader.avatar_url || undefined}
-                                  />
-                                  {v.uploader.nickname || v.uploader.username}
-                                </Space>
-                              </Link>
-                            ) : (
-                              <Typography.Text type="secondary">未知</Typography.Text>
-                            )}
-                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                              上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
-                            </Typography.Text>
-                          </Space>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
+                          </Typography.Text>
                         </Space>
-                      }
-                    />
-                  </List.Item>
-                )
-              }}
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
             />
           </div>
         </Card>
@@ -333,6 +316,43 @@ export default function AssetDetail() {
           <CommentSection assetId={assetId} versions={versions} />
         </Card>
       </Space>
+
+      {/* 点「预览」才预览，并把内容限制在合适大小内 */}
+      <Modal
+        open={!!previewTarget}
+        onCancel={() => setPreviewTarget(null)}
+        footer={null}
+        width={880}
+        title={
+          previewTarget
+            ? `预览 · v${previewTarget.version}${previewTarget.is_latest ? '（最新）' : ''}`
+            : '预览'
+        }
+      >
+        <div style={{ maxHeight: '72vh', overflow: 'auto' }}>
+          <OnlinePreview
+            version={previewTarget}
+            assetName={asset.name}
+            fallback={
+              previewTarget?.thumbnail_url ? (
+                <img
+                  src={previewTarget.thumbnail_url}
+                  alt={asset.name}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', margin: '0 auto' }}
+                />
+              ) : coverSrc ? (
+                <img
+                  src={coverSrc}
+                  alt={asset.name}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', margin: '0 auto' }}
+                />
+              ) : (
+                <Empty description="该格式暂不支持在线预览" style={{ padding: 40 }} />
+              )
+            }
+          />
+        </div>
+      </Modal>
 
       <UploadVersionModal
         open={uploadOpen}

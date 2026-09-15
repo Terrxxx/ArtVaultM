@@ -43,6 +43,11 @@ WANTED_COLUMNS = {
     "project_members": {
         "status": "VARCHAR DEFAULT 'pending'",
     },
+    "assets": {
+        "cover_thumbnail_storage": "VARCHAR DEFAULT 'local'",
+        "small_thumbnail": "VARCHAR",
+        "small_thumbnail_storage": "VARCHAR DEFAULT 'local'",
+    },
     "asset_versions": {
         "file_hash": "VARCHAR",
         "thumbnail": "VARCHAR",

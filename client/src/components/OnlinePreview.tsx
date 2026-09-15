@@ -28,9 +28,16 @@ interface Props {
   /** 无法预览时展示的兜底内容（通常是缩略图或占位图标） */
   fallback?: ReactNode
   assetName?: string
+  /** 预览区最大高度（用于弹窗里限制大小），默认 70vh */
+  maxHeight?: string
 }
 
-export default function OnlinePreview({ version, fallback, assetName }: Props) {
+export default function OnlinePreview({
+  version,
+  fallback,
+  assetName,
+  maxHeight = '70vh',
+}: Props) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const kind = previewKind(version?.file_format)
@@ -87,7 +94,15 @@ export default function OnlinePreview({ version, fallback, assetName }: Props) {
   }
 
   if (kind === 'image') {
-    return <img src={url} alt={assetName || 'preview'} style={{ width: '100%', display: 'block' }} />
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <img
+          src={url}
+          alt={assetName || 'preview'}
+          style={{ maxWidth: '100%', maxHeight, objectFit: 'contain', display: 'block', margin: '0 auto' }}
+        />
+      </div>
+    )
   }
 
   if (kind === 'video') {
@@ -95,7 +110,7 @@ export default function OnlinePreview({ version, fallback, assetName }: Props) {
       <video
         src={url}
         controls
-        style={{ width: '100%', maxHeight: 420, display: 'block', background: '#000' }}
+        style={{ width: '100%', maxHeight, display: 'block', background: '#000' }}
       />
     )
   }

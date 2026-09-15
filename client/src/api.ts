@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from './store'
 import type {
-  ActivityItem,
+  ActivityResponse,
   AdminProject,
   Asset,
   AssetRelation,
@@ -16,6 +16,7 @@ import type {
   User,
   UserBrief,
   UserProfile,
+  UpdateItem,
   Version,
 } from './types'
 
@@ -57,15 +58,30 @@ export const api = {
       .get<Project[]>('/projects/plaza', { params: { limit, exclude_own: excludeOwn } })
       .then((r) => r.data),
   getProject: (id: number) => client.get<Project>(`/projects/${id}`).then((r) => r.data),
-  getProjectActivity: (id: number, days = 180) =>
+  getProjectActivity: (id: number, year?: number | string) =>
     client
-      .get<{ days: number; items: ActivityItem[] }>(`/projects/${id}/activity`, { params: { days } })
-      .then((r) => r.data),
-  getUserActivity: (username: string, days = 180) =>
-    client
-      .get<{ days: number; items: ActivityItem[] }>(`/users/by-username/${username}/activity`, {
-        params: { days },
+      .get<ActivityResponse>(`/projects/${id}/activity`, {
+        params: year != null ? { year } : {},
       })
+      .then((r) => r.data),
+  getProjectUpdates: (id: number, date?: string | null, limit = 20) =>
+    client
+      .get<{ date: string | null; items: UpdateItem[] }>(`/projects/${id}/updates`, {
+        params: { ...(date ? { date } : {}), limit },
+      })
+      .then((r) => r.data),
+  getUserActivity: (username: string, year?: number | string) =>
+    client
+      .get<ActivityResponse>(`/users/by-username/${username}/activity`, {
+        params: year != null ? { year } : {},
+      })
+      .then((r) => r.data),
+  getUserUpdates: (username: string, date?: string | null, limit = 20) =>
+    client
+      .get<{ date: string | null; items: UpdateItem[] }>(
+        `/users/by-username/${username}/updates`,
+        { params: { ...(date ? { date } : {}), limit } },
+      )
       .then((r) => r.data),
   getProjectBySlug: (username: string, slug: string) =>
     client.get<Project>(`/projects/by-slug/${username}/${slug}`).then((r) => r.data),

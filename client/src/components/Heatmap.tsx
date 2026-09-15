@@ -1,12 +1,15 @@
-import { Tooltip, Typography } from 'antd'
+import { Select, Space, Tooltip, Typography } from 'antd'
 import type { ActivityItem } from '../types'
 
-const CELL = 12
+const CELL = 13
 const GAP = 3
 const ROWS = 7
 
-// 由浅到深的 5 档（0 次 + 4 档强度）
+// 0 次 + 4 档强度
 const COLORS = ['#ebedf0', '#d9d5f5', '#b3a8ea', '#8a79dd', '#6c5ce7']
+
+/** 「最近一年」的哨兵值（滚动 12 个月），其余值为具体年份 */
+export const RECENT = 'recent'
 
 function level(count: number): number {
   if (count <= 0) return 0
@@ -23,90 +26,139 @@ function fmt(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** 把「按天的活跃度」铺成 GitHub 那样的周列网格 */
-function buildCells(items: ActivityItem[], weeks: number) {
-  const counts = new Map(items.map((i) => [i.date, i.count]))
+/** 计算展示区间；「最近一年」是滚动 53 周，具体年份是自然年 */
+function rangeOf(year: string | number): { start: Date; end: Date } {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // 让最后一列是完整的一周（到周六），看起来更规整
-  const end = new Date(today)
-  end.setDate(end.getDate() + (6 - end.getDay()))
-  const start = new Date(end)
-  start.setDate(start.getDate() - (weeks * ROWS - 1))
+  if (year === RECENT) {
+    return { start: new Date(today.getTime() - 364 * 86400000), end: today }
+  }
 
-  const cells: { date: string; count: number; future: boolean }[] = []
-  for (let i = 0; i < weeks * ROWS; i++) {
-    const d = new Date(start)
-    d.setDate(d.getDate() + i)
-    const key = fmt(d)
-    cells.push({ date: key, count: counts.get(key) || 0, future: d > today })
+  const y = Number(year)
+  return { start: new Date(y, 0, 1), end: new Date(y, 11, 31) }
+}
+
+function buildCells(days: ActivityItem[], year: string | number) {
+  const counts = new Map(days.map((d) => [d.date, d.count]))
+  const { start, end } = rangeOf(year)
+
+  // 向前补到周日、向后补到周六，保证每列是完整的一周
+  const gridStart = new Date(start)
+  gridStart.setDate(gridStart.getDate() - gridStart.getDay())
+  const gridEnd = new Date(end)
+  gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()))
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const cells: { date: string; count: number; inRange: boolean; future: boolean }[] = []
+  const cursor = new Date(gridStart)
+  while (cursor <= gridEnd) {
+    const key = fmt(cursor)
+    cells.push({
+      date: key,
+      count: counts.get(key) || 0,
+      inRange: cursor >= start && cursor <= end,
+      future: cursor > today,
+    })
+    cursor.setDate(cursor.getDate() + 1)
   }
   return cells
 }
 
 interface Props {
-  items: ActivityItem[]
-  /** 展示最近多少周，默认半年 */
-  weeks?: number
+  days: ActivityItem[]
+  years: number[]
+  value: string | number
+  onChange: (value: string | number) => void
+  selectedDate?: string | null
+  onSelectDay?: (date: string) => void
   loading?: boolean
 }
 
-export default function Heatmap({ items, weeks = 26, loading }: Props) {
-  const cells = buildCells(items, weeks)
-  const total = items.reduce((sum, i) => sum + i.count, 0)
+export default function Heatmap({
+  days,
+  years,
+  value,
+  onChange,
+  selectedDate,
+  onSelectDay,
+  loading,
+}: Props) {
+  const cells = buildCells(days, value)
+  const total = days.reduce((sum, d) => sum + d.count, 0)
 
   return (
     <div>
       <div
         style={{
-          display: 'grid',
-          gridAutoFlow: 'column',
-          gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`,
-          gridAutoColumns: `${CELL}px`,
-          gap: GAP,
-          overflowX: 'auto',
-          paddingBottom: 4,
-          opacity: loading ? 0.4 : 1,
-        }}
-      >
-        {cells.map((c) => (
-          <Tooltip key={c.date} title={`${c.date}　${c.count} 次更新`}>
-            <div
-              style={{
-                width: CELL,
-                height: CELL,
-                borderRadius: 2,
-                background: c.future ? 'transparent' : COLORS[level(c.count)],
-              }}
-            />
-          </Tooltip>
-        ))}
-      </div>
-      <div
-        style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
-          marginTop: 8,
-          gap: 12,
+          gap: 16,
           flexWrap: 'wrap',
         }}
       >
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          近 {weeks} 周共 {total} 次更新
-        </Typography.Text>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            少
-          </Typography.Text>
-          {COLORS.map((c) => (
-            <div key={c} style={{ width: CELL, height: CELL, borderRadius: 2, background: c }} />
-          ))}
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            多
-          </Typography.Text>
+        <div
+          style={{
+            display: 'grid',
+            gridAutoFlow: 'column',
+            gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`,
+            gridAutoColumns: `${CELL}px`,
+            gap: GAP,
+            overflowX: 'auto',
+            paddingBottom: 4,
+            opacity: loading ? 0.4 : 1,
+          }}
+        >
+          {cells.map((c) => {
+            const selected = selectedDate === c.date
+            return (
+              <Tooltip key={c.date} title={`${c.date}　${c.count} 次更新`}>
+                <div
+                  onClick={() => c.inRange && onSelectDay?.(c.date)}
+                  style={{
+                    width: CELL,
+                    height: CELL,
+                    borderRadius: 2,
+                    background: c.future || !c.inRange ? 'transparent' : COLORS[level(c.count)],
+                    outline: selected ? '2px solid #6c5ce7' : 'none',
+                    outlineOffset: 1,
+                    cursor: c.inRange ? 'pointer' : 'default',
+                  }}
+                />
+              </Tooltip>
+            )
+          })}
         </div>
+
+        <Space direction="vertical" size={8} align="end">
+          <Select
+            size="small"
+            style={{ width: 130 }}
+            value={value}
+            onChange={onChange}
+            options={[
+              { value: RECENT, label: '最近一年' },
+              ...years.map((y) => ({ value: y, label: `${y} 年` })),
+            ]}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              少
+            </Typography.Text>
+            {COLORS.map((c) => (
+              <div key={c} style={{ width: CELL, height: CELL, borderRadius: 2, background: c }} />
+            ))}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              多
+            </Typography.Text>
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            共 {total} 次更新
+          </Typography.Text>
+        </Space>
       </div>
     </div>
   )

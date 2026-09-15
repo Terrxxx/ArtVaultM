@@ -26,10 +26,10 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
-import type { ActivityItem, Asset, Category, Project } from '../types'
+import type { ActivityResponse, Asset, Category, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
-import Heatmap from '../components/Heatmap'
+import Heatmap, { RECENT } from '../components/Heatmap'
 import UploadAssetModal from '../components/UploadAssetModal'
 import { useAuthStore } from '../store'
 
@@ -41,7 +41,8 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
-  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [activity, setActivity] = useState<ActivityResponse | null>(null)
+  const [year, setYear] = useState<string | number>(RECENT)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -50,13 +51,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [fresh, subs, act] = await Promise.all([
+      const [fresh, subs] = await Promise.all([
         api.getProject(project.id),
         api.listSubscriptions(),
-        api.getProjectActivity(project.id).catch(() => ({ items: [] })),
       ])
       setProject(fresh)
-      setActivity(act.items)
       setSubscribed(subs.some((s) => s.target_type === 'project' && s.target_id === project.id))
       const params: Record<string, unknown> = {}
       if (categoryId) params.category_id = categoryId
@@ -72,6 +71,18 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   useEffect(() => {
     load()
   }, [load])
+
+  // 热力图（按年）
+  useEffect(() => {
+    let alive = true
+    api
+      .getProjectActivity(project.id, year)
+      .then((r) => alive && setActivity(r))
+      .catch(() => alive && setActivity(null))
+    return () => {
+      alive = false
+    }
+  }, [project.id, year])
 
   // 编辑项目：仅创建者本人或高级管理员
   const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
@@ -188,7 +199,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         )}
 
         <Card title="更新热力图">
-          <Heatmap items={activity} />
+          <Heatmap
+            days={activity?.days || []}
+            years={activity?.years || []}
+            value={year}
+            onChange={setYear}
+          />
         </Card>
       </Space>
 
