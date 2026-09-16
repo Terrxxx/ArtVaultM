@@ -96,6 +96,11 @@ class RelationCreate(BaseModel):
     relation_type: str = "related"  # related / uses / used_by
 
 
+# ---------- 资产移动（文件夹） ----------
+class AssetMoveRequest(BaseModel):
+    category_id: int
+
+
 # ---------- 分类 ----------
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1)

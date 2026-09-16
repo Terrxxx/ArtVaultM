@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Asset, AssetRelation, AssetVersion, Category, User
+from ..models import Asset, AssetRelation, AssetVersion, Category, Project, User
+from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict
 from ..services import notify, storage, storage_config
-from .deps import can_edit_asset, ensure_project_access, get_current_user
+from .deps import can_edit_asset, ensure_project_access, get_current_user, is_super_admin
 
 router = APIRouter()
 
@@ -275,6 +276,41 @@ def update_asset(
     db.commit()
     db.refresh(asset)
     return asset_to_dict(asset, include_versions=True, current_user_id=user.id)
+
+
+@router.patch("/assets/{asset_id}/category")
+def move_asset(
+    asset_id: int,
+    payload: AssetMoveRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """把资产移动到指定文件夹（分类）。
+
+    项目所有者/高级管理员可移动项目内任意资产，成员仅可移动自己创建的。
+    """
+    asset = db.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="资产不存在")
+
+    project = db.get(Project, asset.project_id)
+    if not (
+        is_super_admin(user)
+        or (project is not None and project.owner_id == user.id)
+        or asset.created_by == user.id
+    ):
+        raise HTTPException(
+            status_code=403, detail="仅资产创建者或项目所有者可移动该资产"
+        )
+
+    category = db.get(Category, payload.category_id)
+    if category is None or category.project_id != asset.project_id:
+        raise HTTPException(status_code=400, detail="文件夹不存在或不属于该项目")
+
+    asset.category_id = payload.category_id
+    db.commit()
+    db.refresh(asset)
+    return asset_to_dict(asset, current_user_id=user.id)
 
 
 @router.delete("/assets/{asset_id}")

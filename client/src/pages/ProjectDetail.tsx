@@ -8,6 +8,7 @@ import {
   Empty,
   Input,
   message,
+  Modal,
   Result,
   Row,
   Select,
@@ -21,6 +22,7 @@ import {
   BarChartOutlined,
   BellOutlined,
   EditOutlined,
+  FolderAddOutlined,
   GithubOutlined,
   PlusOutlined,
   SearchOutlined,
@@ -50,6 +52,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
   const [rankOpen, setRankOpen] = useState(false)
+  const [folderOpen, setFolderOpen] = useState(false)
+  const [folderName, setFolderName] = useState('')
+  const [folderSubmitting, setFolderSubmitting] = useState(false)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -123,6 +128,32 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
+  const createFolder = async () => {
+    if (!folderName.trim()) return
+    setFolderSubmitting(true)
+    try {
+      await api.createCategory(project.id, folderName.trim())
+      message.success('已创建文件夹')
+      setFolderName('')
+      setFolderOpen(false)
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '创建失败')
+    } finally {
+      setFolderSubmitting(false)
+    }
+  }
+
+  const moveAsset = async (assetId: number, categoryId: number) => {
+    try {
+      await api.moveAsset(assetId, categoryId)
+      message.success('已移动')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '移动失败')
+    }
+  }
+
   return (
     <div>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -180,11 +211,22 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           <Select
             style={{ minWidth: 160 }}
             allowClear
-            placeholder="全部分类"
+            placeholder="全部文件夹"
             value={categoryId}
             onChange={(v) => setCategoryId(v)}
             options={categories.map((c) => ({ value: c.id, label: c.name }))}
           />
+          {canEdit && (
+            <Button
+              icon={<FolderAddOutlined />}
+              onClick={() => {
+                setFolderName('')
+                setFolderOpen(true)
+              }}
+            >
+              新建文件夹
+            </Button>
+          )}
           <Input.Search
             placeholder="搜索资产名 / 描述 / 标签 / 文件名 / 上传者"
             allowClear
@@ -216,7 +258,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           <Row gutter={[16, 16]}>
             {assets.map((a) => (
               <Col xs={24} sm={12} lg={6} key={a.id}>
-                <AssetCard asset={a} />
+                <AssetCard
+                  asset={a}
+                  categories={categories}
+                  onMove={canEdit || a.created_by === me?.id ? moveAsset : undefined}
+                />
               </Col>
             ))}
           </Row>
@@ -239,6 +285,24 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />
+
+      <Modal
+        title="新建文件夹"
+        open={folderOpen}
+        onOk={createFolder}
+        onCancel={() => setFolderOpen(false)}
+        confirmLoading={folderSubmitting}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Input
+          placeholder="文件夹名称，如：角色、场景、道具"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+          onPressEnter={createFolder}
+          autoFocus
+        />
+      </Modal>
 
       {/* 贡献排行放在左侧抽屉里，不影响主体布局 */}
       <Drawer

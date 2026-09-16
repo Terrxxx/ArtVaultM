@@ -140,6 +140,9 @@ export const api = {
   updateAsset: (id: number, form: FormData) =>
     client.patch<Asset>(`/assets/${id}`, form).then((r) => r.data),
   deleteAsset: (id: number) => client.delete(`/assets/${id}`).then((r) => r.data),
+  /** 把资产移动到指定文件夹（分类） */
+  moveAsset: (id: number, categoryId: number) =>
+    client.patch<Asset>(`/assets/${id}/category`, { category_id: categoryId }).then((r) => r.data),
 
   // ---------- 版本 ----------
   listVersions: (assetId: number) =>

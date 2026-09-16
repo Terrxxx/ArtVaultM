@@ -27,8 +27,8 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, downloadVersion, formatSize, userPath } from '../api'
-import type { Asset, Version } from '../types'
+import { api, assetPath, downloadVersion, formatSize, userPath } from '../api'
+import type { Asset, AssetRelation, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
 import UploadVersionModal from '../components/UploadVersionModal'
@@ -43,6 +43,7 @@ export default function AssetDetail() {
   const { id } = useParams()
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
+  const [relations, setRelations] = useState<AssetRelation[]>([])
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -54,8 +55,13 @@ export default function AssetDetail() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [a, subs] = await Promise.all([api.getAsset(assetId), api.listSubscriptions()])
+      const [a, subs, rels] = await Promise.all([
+        api.getAsset(assetId),
+        api.listSubscriptions(),
+        api.listRelations(assetId),
+      ])
       setAsset(a)
+      setRelations(rels)
       setSubscribed(subs.some((s) => s.target_type === 'asset' && s.target_id === assetId))
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
@@ -311,6 +317,59 @@ export default function AssetDetail() {
               }}
             />
           </div>
+        </Card>
+
+        <Card title={`相关资产（${relations.length}）`}>
+          {relations.length === 0 ? (
+            <Empty description="暂无关联" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <List
+              dataSource={relations}
+              grid={{ gutter: 16, xs: 1, sm: 2, lg: 3 }}
+              renderItem={(r) => {
+                const thumb = r.asset.small_thumbnail_url || r.asset.cover_thumbnail_url || null
+                return (
+                  <List.Item>
+                    <Link to={assetPath(r.asset)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt={r.asset.name}
+                          style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee' }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 42,
+                            height: 42,
+                            background: '#f0f0f0',
+                            borderRadius: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#c0c0c0',
+                          }}
+                        >
+                          <FileOutlined />
+                        </div>
+                      )}
+                      <div>
+                        <Typography.Text strong>
+                          {r.direction === 'in' ? '← ' : '→ '}
+                          {r.asset.name}
+                        </Typography.Text>
+                        {r.asset.category_name && (
+                          <Tag color="geekblue" style={{ marginLeft: 8 }}>
+                            {r.asset.category_name}
+                          </Tag>
+                        )}
+                      </div>
+                    </Link>
+                  </List.Item>
+                )
+              }}
+            />
+          )}
         </Card>
 
         <Card title="评论">
