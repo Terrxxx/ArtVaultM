@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Col,
-  Drawer,
   Dropdown,
   Empty,
   Input,
@@ -20,7 +19,6 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined,
-  BarChartOutlined,
   BellOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -60,7 +58,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [rankDays, setRankDays] = useState(30)
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
-  const [rankOpen, setRankOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [folderSubmitting, setFolderSubmitting] = useState(false)
@@ -141,6 +138,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       alive = false
     }
   }, [project.id, rankDays])
+
+  // 这一页是左中右三栏（贡献排行 / 内容 / 热力图），让外层容器撑满屏幕、别在两侧留白
+  useEffect(() => {
+    document.body.classList.add('av-wide')
+    return () => document.body.classList.remove('av-wide')
+  }, [])
 
   // 编辑项目：仅创建者本人或高级管理员
   const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
@@ -341,7 +344,22 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       >
         <FileOutlined style={{ fontSize: 28 }} />
       </div>
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <div className="av-project-layout">
+        {/* 左栏：贡献排行 */}
+        <div className="av-rail-left">
+          <Card title="贡献排行">
+            <Leaderboard
+              items={rankItems}
+              days={rankDays}
+              onDaysChange={setRankDays}
+              loading={rankLoading}
+              emptyText="这段时间还没有贡献"
+            />
+          </Card>
+        </div>
+
+        {/* 中间：原来的项目内容 */}
+        <Space direction="vertical" size={16} className="av-project-main">
         <Space align="center" size={12} wrap>
           <Link to="/">
             <ArrowLeftOutlined /> 返回
@@ -420,9 +438,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               新建文件夹
             </Button>
           )}
-          <Button icon={<BarChartOutlined />} onClick={() => setRankOpen(true)}>
-            贡献排行
-          </Button>
         </Space>
 
         {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
@@ -594,16 +609,21 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             ))}
           </Row>
         )}
+        </Space>
 
-        <Card title="更新热力图">
-          <Heatmap
-            days={activity?.days || []}
-            years={activity?.years || []}
-            value={year}
-            onChange={setYear}
-          />
-        </Card>
-      </Space>
+        {/* 右栏：竖向热力图 */}
+        <div className="av-rail-right">
+          <Card title="更新热力图">
+            <Heatmap
+              vertical
+              days={activity?.days || []}
+              years={activity?.years || []}
+              value={year}
+              onChange={setYear}
+            />
+          </Card>
+        </div>
+      </div>
 
       <UploadAssetModal
         open={uploadOpen}
@@ -686,22 +706,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         </Space>
       </Modal>
 
-      {/* 贡献排行放在左侧抽屉里，不影响主体布局 */}
-      <Drawer
-        title="贡献排行"
-        placement="left"
-        width={340}
-        open={rankOpen}
-        onClose={() => setRankOpen(false)}
-      >
-        <Leaderboard
-          items={rankItems}
-          days={rankDays}
-          onDaysChange={setRankDays}
-          loading={rankLoading}
-          emptyText="这段时间还没有贡献"
-        />
-      </Drawer>
     </div>
   )
 }

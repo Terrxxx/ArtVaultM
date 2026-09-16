@@ -6,8 +6,9 @@ const CELL = 10
 const GAP = 3
 const ROWS = 7
 const RADIUS = 2
-// 月份标签那一行的高度，星期标签列要按它下移才能和格子对齐
+// 横向时上方月份标签那一行的高度 / 竖向时左侧月份标签那一列的宽度
 const MONTH_ROW = 15
+const MONTH_COL = 26
 
 // 0 次 + 4 档强度
 const COLORS = ['var(--av-heat-0)', 'var(--av-heat-1)', 'var(--av-heat-2)', 'var(--av-heat-3)', 'var(--av-heat-4)']
@@ -97,6 +98,8 @@ interface Props {
   selectedDate?: string | null
   onSelectDay?: (date: string) => void
   loading?: boolean
+  /** 竖向：一周 7 天横排、周次自上往下（用于侧栏那种窄而高的位置） */
+  vertical?: boolean
 }
 
 export default function Heatmap({
@@ -107,18 +110,95 @@ export default function Heatmap({
   selectedDate,
   onSelectDay,
   loading,
+  vertical = false,
 }: Props) {
   const cells = buildCells(days, value)
   const monthLabels = monthLabelsOf(cells)
   const total = days.reduce((sum, d) => sum + d.count, 0)
 
+  const cellGrid: React.CSSProperties = vertical
+    ? { display: 'grid', gridAutoFlow: 'row', gridTemplateColumns: `repeat(${ROWS}, ${CELL}px)`, gap: GAP }
+    : { display: 'grid', gridAutoFlow: 'column', gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`, gap: GAP }
+
+  // 星期标签横向时是左边一列、竖向时是顶上一行，两者都按 MONTH_ROW/MONTH_COL 让位给月份标签
+  const weekdayAxis: React.CSSProperties = vertical
+    ? {
+        display: 'grid',
+        gridAutoFlow: 'column',
+        gridTemplateColumns: `repeat(${ROWS}, ${CELL}px)`,
+        gap: GAP,
+        paddingLeft: MONTH_COL,
+      }
+    : {
+        display: 'grid',
+        gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`,
+        gap: GAP,
+        paddingTop: MONTH_ROW,
+      }
+
+  const monthAxis: React.CSSProperties = vertical
+    ? { display: 'grid', gridAutoFlow: 'row', gridTemplateRows: `${CELL}px`, gap: GAP, width: MONTH_COL }
+    : { display: 'grid', gridAutoFlow: 'column', gridAutoColumns: `${CELL}px`, gap: GAP, height: MONTH_ROW }
+
+  const cellsGrid = (
+    <div style={cellGrid}>
+      {cells.map((c) => {
+        const selected = selectedDate === c.date
+        const blank = c.future || !c.inRange
+        return (
+          <Tooltip key={c.date} title={`${c.date}　${c.count} 次更新`}>
+            <div
+              onClick={() => c.inRange && onSelectDay?.(c.date)}
+              style={{
+                width: CELL,
+                height: CELL,
+                borderRadius: RADIUS,
+                background: blank ? 'transparent' : COLORS[level(c.count)],
+                boxShadow: blank ? undefined : CELL_EDGE,
+                outline: selected ? '2px solid var(--av-primary)' : undefined,
+                outlineOffset: 1,
+                cursor: c.inRange ? 'pointer' : 'default',
+              }}
+            />
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+
+  const weekdayAxisEl = (
+    <div style={weekdayAxis}>
+      {WEEKDAY_LABELS.map((label, i) => (
+        <Typography.Text key={i} type="secondary" style={{ fontSize: 9, lineHeight: `${CELL}px` }}>
+          {label}
+        </Typography.Text>
+      ))}
+    </div>
+  )
+
+  // 月份标签和格子共用同一套行/列尺寸，靠文字溢出显示，天然对齐
+  const monthAxisEl = (
+    <div style={monthAxis}>
+      {monthLabels.map((label, i) => (
+        <Typography.Text
+          key={i}
+          type="secondary"
+          style={{ fontSize: 10, lineHeight: `${vertical ? CELL : 14}px`, whiteSpace: 'nowrap' }}
+        >
+          {label || ''}
+        </Typography.Text>
+      ))}
+    </div>
+  )
+
   return (
     <div
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
+        flexDirection: vertical ? 'column' : 'row',
+        alignItems: vertical ? 'stretch' : 'flex-start',
         justifyContent: 'space-between',
-        gap: 16,
+        gap: 12,
         flexWrap: 'wrap',
       }}
     >
@@ -130,87 +210,29 @@ export default function Heatmap({
           borderRadius: 6,
           padding: 8,
           opacity: loading ? 0.4 : 1,
+          alignSelf: 'flex-start',
         }}
       >
-        <div style={{ display: 'flex', gap: 4 }}>
-          {/* 星期标签：只标一/三/五，和格子逐行对齐 */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`,
-              gap: GAP,
-              paddingTop: MONTH_ROW,
-            }}
-          >
-            {WEEKDAY_LABELS.map((label, i) => (
-              <Typography.Text
-                key={i}
-                type="secondary"
-                style={{ fontSize: 9, lineHeight: `${CELL}px` }}
-              >
-                {label}
-              </Typography.Text>
-            ))}
-          </div>
-
+        {vertical ? (
           <div>
-            {/* 月份标签：和格子同一套列宽，靠文字溢出显示，天然对齐 */}
-            <div
-              style={{
-                display: 'grid',
-                gridAutoFlow: 'column',
-                gridAutoColumns: `${CELL}px`,
-                gap: GAP,
-                height: MONTH_ROW,
-              }}
-            >
-              {monthLabels.map((label, i) => (
-                <Typography.Text
-                  key={i}
-                  type="secondary"
-                  style={{ fontSize: 10, lineHeight: 1, whiteSpace: 'nowrap' }}
-                >
-                  {label || ''}
-                </Typography.Text>
-              ))}
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridAutoFlow: 'column',
-                gridTemplateRows: `repeat(${ROWS}, ${CELL}px)`,
-                gridAutoColumns: `${CELL}px`,
-                gap: GAP,
-              }}
-            >
-              {cells.map((c) => {
-                const selected = selectedDate === c.date
-                const blank = c.future || !c.inRange
-                return (
-                  <Tooltip key={c.date} title={`${c.date}　${c.count} 次更新`}>
-                    <div
-                      onClick={() => c.inRange && onSelectDay?.(c.date)}
-                      style={{
-                        width: CELL,
-                        height: CELL,
-                        borderRadius: RADIUS,
-                        background: blank ? 'transparent' : COLORS[level(c.count)],
-                        boxShadow: blank ? undefined : CELL_EDGE,
-                        outline: selected ? '2px solid var(--av-primary)' : undefined,
-                        outlineOffset: 1,
-                        cursor: c.inRange ? 'pointer' : 'default',
-                      }}
-                    />
-                  </Tooltip>
-                )
-              })}
+            {weekdayAxisEl}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {monthAxisEl}
+              {cellsGrid}
             </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {weekdayAxisEl}
+            <div>
+              {monthAxisEl}
+              {cellsGrid}
+            </div>
+          </div>
+        )}
       </div>
 
-      <Space direction="vertical" size={8} align="end">
+      <Space direction="vertical" size={8} align={vertical ? 'start' : 'end'}>
         <Select
           size="small"
           style={{ width: 130 }}

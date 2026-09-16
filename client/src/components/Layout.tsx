@@ -152,7 +152,8 @@ export default function Layout() {
         </Space>
       </AntLayout.Header>
 
-      <AntLayout.Content style={{ padding: 24, width: '100%', maxWidth: 1200, margin: '0 auto' }}>
+      {/* 宽度交给 index.css 的 .av-content：项目详情页会给自己挂 av-wide 撑满屏幕 */}
+      <AntLayout.Content className="av-content">
         <Outlet />
       </AntLayout.Content>
     </AntLayout>
