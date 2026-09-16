@@ -91,8 +91,6 @@ export const api = {
     description?: string
     github_repo_url?: string
     visibility: string
-    category_mode: string
-    custom_categories?: string[]
   }) => client.post<Project>('/projects', data).then((r) => r.data),
   updateProject: (id: number, data: Record<string, unknown>) =>
     client.patch<Project>(`/projects/${id}`, data).then((r) => r.data),

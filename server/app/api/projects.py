@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Category, Project, ProjectMember, User
+from ..models import Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
 from ..serializers import project_to_dict
 from ..services import stats
@@ -17,18 +17,6 @@ from .deps import (
 )
 
 router = APIRouter()
-
-SYSTEM_CATEGORIES = [
-    "模型",
-    "贴图与材质",
-    "动画",
-    "特效",
-    "音频",
-    "UI与图标",
-    "场景",
-    "概念设计",
-    "其他",
-]
 
 
 def unique_slug(db: Session, owner_id: int, name: str) -> str:
@@ -63,22 +51,6 @@ def create_project(
     )
     db.add(project)
     db.flush()
-
-    # 归类方式：默认用系统分类，或使用自定义分类
-    if payload.category_mode == "custom" and payload.custom_categories:
-        names = [n.strip() for n in payload.custom_categories if n and n.strip()]
-    else:
-        names = list(SYSTEM_CATEGORIES)
-
-    for i, name in enumerate(names):
-        db.add(
-            Category(
-                project_id=project.id,
-                name=name,
-                sort_order=i,
-                is_system=(payload.category_mode != "custom"),
-            )
-        )
 
     db.commit()
     db.refresh(project)

@@ -23,6 +23,23 @@ def _target_storage(cos: Optional[dict]) -> str:
     return "cos" if cos else "local"
 
 
+def purge_asset(db: Session, asset: Asset, cos: Optional[dict]) -> None:
+    """删除资产本体：关联关系、各版本缩略图与 COS 实体文件。由调用方负责 commit。"""
+    db.query(AssetRelation).filter(
+        (AssetRelation.from_asset_id == asset.id)
+        | (AssetRelation.to_asset_id == asset.id)
+    ).delete(synchronize_session=False)
+
+    for v in asset.versions:
+        storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
+        storage.delete_file(v.thumb_small, v.thumb_small_storage or "local", cos)
+        if v.storage == "cos":
+            storage.delete_file(v.file_path, "cos", cos)
+    storage.delete_asset_dir(asset.project_id, asset.id)
+
+    db.delete(asset)
+
+
 def _find_reusable_version(
     db: Session,
     project_id: int,
@@ -342,22 +359,6 @@ def delete_asset(
             status_code=403, detail="仅资产创建者或高级管理员可删除该资产"
         )
 
-    project_id = asset.project_id
-    cos = storage_config.cos_params(db)
-
-    # 清理关联关系、缩略图与实体文件
-    db.query(AssetRelation).filter(
-        (AssetRelation.from_asset_id == asset_id)
-        | (AssetRelation.to_asset_id == asset_id)
-    ).delete(synchronize_session=False)
-
-    for v in asset.versions:
-        storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
-        storage.delete_file(v.thumb_small, v.thumb_small_storage or "local", cos)
-        if v.storage == "cos":
-            storage.delete_file(v.file_path, "cos", cos)
-    storage.delete_asset_dir(project_id, asset_id)
-
-    db.delete(asset)
+    purge_asset(db, asset, storage_config.cos_params(db))
     db.commit()
     return {"ok": True}

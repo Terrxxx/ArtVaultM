@@ -69,7 +69,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   // 拖拽时跟随光标的图标（离屏渲染，交给 setDragImage）
   const dragIconRef = useRef<HTMLDivElement>(null)
-  // 删除文件夹确认弹窗
+  // 重命名文件夹弹窗
+  const [renameTarget, setRenameTarget] = useState<Category | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [renameSubmitting, setRenameSubmitting] = useState(false)
+  // 删除文件夹确认弹窗（仅文件夹内有资产时使用）
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
@@ -196,17 +200,49 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
-  const confirmDeleteFolder = async () => {
-    if (!deleteTarget || deleteInput.trim() !== deleteTarget.name) return
-    setDeleteSubmitting(true)
+  const renameFolder = async () => {
+    if (!renameTarget || !renameName.trim()) return
+    setRenameSubmitting(true)
     try {
-      await api.deleteCategory(deleteTarget.id)
+      await api.updateCategory(renameTarget.id, { name: renameName.trim() })
+      message.success('已重命名')
+      setRenameTarget(null)
+      setRenameName('')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '重命名失败')
+    } finally {
+      setRenameSubmitting(false)
+    }
+  }
+
+  const removeFolder = async (category: Category) => {
+    try {
+      await api.deleteCategory(category.id)
       message.success('文件夹已删除')
       setDeleteTarget(null)
       setDeleteInput('')
       load()
     } catch (e: any) {
       message.error(e.response?.data?.detail || '删除失败')
+    }
+  }
+
+  // 有资产的文件夹要输入名称二次确认（资产会被一并删除），空的直接删
+  const requestDeleteFolder = (category: Category) => {
+    if (!category.asset_count) {
+      removeFolder(category)
+      return
+    }
+    setDeleteTarget(category)
+    setDeleteInput('')
+  }
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteTarget || deleteInput.trim() !== deleteTarget.name) return
+    setDeleteSubmitting(true)
+    try {
+      await removeFolder(deleteTarget)
     } finally {
       setDeleteSubmitting(false)
     }
@@ -475,6 +511,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                         menu={{
                           items: [
                             {
+                              key: 'rename',
+                              icon: <EditOutlined />,
+                              label: '重命名',
+                            },
+                            {
                               key: 'delete',
                               icon: <DeleteOutlined />,
                               label: '删除文件夹',
@@ -483,9 +524,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                           ],
                           onClick: ({ key, domEvent }) => {
                             domEvent.stopPropagation()
-                            if (key === 'delete') {
-                              setDeleteTarget(c)
-                              setDeleteInput('')
+                            if (key === 'rename') {
+                              setRenameTarget(c)
+                              setRenameName(c.name)
+                            } else if (key === 'delete') {
+                              requestDeleteFolder(c)
                             }
                           },
                         }}
@@ -560,7 +603,30 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         />
       </Modal>
 
-      {/* 删除文件夹：需输入文件夹名称二次确认 */}
+      {/* 重命名文件夹 */}
+      <Modal
+        title="重命名文件夹"
+        open={!!renameTarget}
+        onOk={renameFolder}
+        onCancel={() => {
+          setRenameTarget(null)
+          setRenameName('')
+        }}
+        confirmLoading={renameSubmitting}
+        okText="保存"
+        cancelText="取消"
+        okButtonProps={{ disabled: !renameName.trim() }}
+      >
+        <Input
+          value={renameName}
+          onChange={(e) => setRenameName(e.target.value)}
+          onPressEnter={renameFolder}
+          placeholder="文件夹名称"
+          autoFocus
+        />
+      </Modal>
+
+      {/* 删除文件夹：仅当文件夹内有资产时弹窗，需输入文件夹名称二次确认 */}
       <Modal
         title={`删除文件夹「${deleteTarget?.name ?? ''}」`}
         open={!!deleteTarget}
@@ -575,7 +641,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         okButtonProps={{ danger: true, disabled: deleteInput.trim() !== deleteTarget?.name }}
       >
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          <Typography.Text type="danger">删除后不可恢复，请谨慎操作。</Typography.Text>
+          <Typography.Text type="danger">
+            该文件夹内的 {deleteTarget?.asset_count} 个资产会被一并永久删除，不可恢复。
+          </Typography.Text>
           <Typography.Text type="secondary">
             请输入文件夹名称「{deleteTarget?.name}」以确认删除：
           </Typography.Text>

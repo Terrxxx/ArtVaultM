@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,8 +60,6 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
     github_repo_url: Optional[str] = None
     visibility: str = "public"  # public / private
-    category_mode: str = "default"  # default=用系统默认分类 / custom=自定义
-    custom_categories: Optional[List[str]] = None
 
 
 class ProjectUpdate(BaseModel):

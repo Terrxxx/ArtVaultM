@@ -10,7 +10,6 @@ import {
   Input,
   message,
   Modal,
-  Radio,
   Row,
   Segmented,
   Select,
@@ -32,8 +31,6 @@ import { api, projectPath, userPath } from '../api'
 import type { Project } from '../types'
 import { useAuthStore } from '../store'
 
-const SYSTEM_CATEGORY_HINT = '模型、贴图与材质、动画、特效、音频、UI与图标、场景、概念设计、其他'
-
 export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
   const [plaza, setPlaza] = useState<Project[]>([])
@@ -44,7 +41,6 @@ export default function ProjectList() {
   const [createForm] = Form.useForm()
   const navigate = useNavigate()
   const me = useAuthStore((s) => s.user)
-  const categoryMode = Form.useWatch('category_mode', createForm)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,11 +66,7 @@ export default function ProjectList() {
   const onCreate = async (values: any) => {
     setSubmitting(true)
     try {
-      const p = await api.createProject({
-        ...values,
-        custom_categories:
-          values.category_mode === 'custom' ? values.custom_categories || [] : undefined,
-      })
+      const p = await api.createProject(values)
       message.success('创建成功')
       setCreateOpen(false)
       createForm.resetFields()
@@ -180,7 +172,7 @@ export default function ProjectList() {
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => {
-            createForm.setFieldsValue({ visibility: 'public', category_mode: 'default' })
+            createForm.setFieldsValue({ visibility: 'public' })
             setCreateOpen(true)
           }}
         >
@@ -234,7 +226,7 @@ export default function ProjectList() {
           form={createForm}
           layout="vertical"
           onFinish={onCreate}
-          initialValues={{ visibility: 'public', category_mode: 'default' }}
+          initialValues={{ visibility: 'public' }}
         >
           <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
             <Input placeholder="如：暗黑之魂" />
@@ -253,26 +245,6 @@ export default function ProjectList() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="category_mode" label="资产归类方式">
-            <Radio.Group>
-              <Radio value="default">使用系统默认分类</Radio>
-              <Radio value="custom">自定义分类</Radio>
-            </Radio.Group>
-          </Form.Item>
-          {categoryMode === 'default' ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              将自动创建：{SYSTEM_CATEGORY_HINT}
-            </Typography.Text>
-          ) : (
-            <Form.Item
-              name="custom_categories"
-              label="自定义分类"
-              rules={[{ required: true, message: '请至少填写一个分类' }]}
-              extra="输入后回车即可添加，可填多个"
-            >
-              <Select mode="tags" placeholder="如：角色、场景、道具" open={false} />
-            </Form.Item>
-          )}
         </Form>
       </Modal>
     </div>

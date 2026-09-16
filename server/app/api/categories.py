@@ -5,6 +5,8 @@ from ..database import get_db
 from ..models import Category, User
 from ..schemas import CategoryCreate, CategoryUpdate
 from ..serializers import category_to_dict
+from ..services import storage_config
+from .assets import purge_asset
 from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
@@ -97,13 +99,17 @@ def delete_category(
     if category is None:
         raise HTTPException(status_code=404, detail="分类不存在")
     ensure_project_editor(db, category.project_id, user)
-    if category.assets:
-        raise HTTPException(status_code=400, detail="该文件夹下仍有资产，无法删除")
     has_children = (
         db.query(Category).filter(Category.parent_id == category_id).first() is not None
     )
     if has_children:
         raise HTTPException(status_code=400, detail="该文件夹下仍有子文件夹，无法删除")
+
+    # 文件夹内的资产一并删除（前端已就「有资产」做过二次确认）
+    cos = storage_config.cos_params(db)
+    for asset in list(category.assets):
+        purge_asset(db, asset, cos)
+
     db.delete(category)
     db.commit()
     return {"ok": True}
