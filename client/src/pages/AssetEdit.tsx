@@ -45,7 +45,7 @@ export default function AssetEdit() {
         name: a.name,
         description: a.description,
         tags: a.tags?.join(',') ?? '',
-        category_id: a.category_id ?? 0,
+        category_id: a.category_id ?? undefined,
       })
       const cats = await api.listCategories(a.project_id)
       setCategories(cats)
@@ -78,8 +78,8 @@ export default function AssetEdit() {
     fd.append('name', values.name)
     if (values.description !== undefined) fd.append('description', values.description ?? '')
     if (values.tags !== undefined) fd.append('tags', values.tags ?? '')
-    if (values.category_id !== undefined && values.category_id !== null)
-      fd.append('category_id', String(values.category_id))
+    // 发送 0 表示清空资产类型（字段留空时后端才认得出是要清掉）
+    fd.append('category_id', String(values.category_id ?? 0))
     const thumb = values.thumbnail?.[0]?.originFileObj
     if (thumb) fd.append('thumbnail', thumb)
 
@@ -132,12 +132,15 @@ export default function AssetEdit() {
                   <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
                     <Input />
                   </Form.Item>
-                  <Form.Item name="category_id" label="资产类型">
+                  <Form.Item
+                    name="category_id"
+                    label="资产类型"
+                    extra="只是给资产打个声明，和它放在哪个文件夹没有关系；可以留空"
+                  >
                     <Select
-                      options={[
-                        { value: 0, label: '根目录' },
-                        ...categories.map((c) => ({ value: c.id, label: c.name })),
-                      ]}
+                      allowClear
+                      placeholder="未分类"
+                      options={categories.map((c) => ({ value: c.id, label: c.name }))}
                     />
                   </Form.Item>
                   <Form.Item name="description" label="描述">

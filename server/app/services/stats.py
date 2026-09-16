@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     Asset,
     AssetVersion,
-    Category,
+    Folder,
     DownloadLog,
     Project,
     ProjectMember,
@@ -25,7 +25,7 @@ from . import storage
 
 # 热度权重
 W_ASSETS = 2.0  # 每个资产
-W_CATEGORIES = 1.0  # 每个分类
+W_FOLDERS = 1.0  # 每个文件夹（分类是每个项目都有的默认列表，衡量不出活跃度）
 W_DOWNLOADS = 4.0  # log2(1+下载数)，避免大户刷榜
 W_RECENT = 10.0  # 近 RECENT_DAYS 天内的每个新版本
 RECENT_DAYS = 30
@@ -43,10 +43,10 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
         .group_by(Asset.project_id)
         .all()
     )
-    category_counts = dict(
-        db.query(Category.project_id, func.count(Category.id))
-        .filter(Category.project_id.in_(project_ids))
-        .group_by(Category.project_id)
+    folder_counts = dict(
+        db.query(Folder.project_id, func.count(Folder.id))
+        .filter(Folder.project_id.in_(project_ids))
+        .group_by(Folder.project_id)
         .all()
     )
     # 下载量：项目下所有版本的下载记录之和
@@ -74,12 +74,12 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
     scores = {}
     for pid in project_ids:
         assets = asset_counts.get(pid, 0)
-        categories = category_counts.get(pid, 0)
+        folders = folder_counts.get(pid, 0)
         downloads = download_counts.get(pid, 0)
         recent = recent_counts.get(pid, 0)
         scores[pid] = round(
             W_ASSETS * assets
-            + W_CATEGORIES * categories
+            + W_FOLDERS * folders
             + W_DOWNLOADS * math.log2(1 + downloads)
             + W_RECENT * recent,
             2,

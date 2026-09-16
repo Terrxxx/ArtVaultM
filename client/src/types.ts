@@ -35,13 +35,24 @@ export interface Version {
   created_at?: string
 }
 
+/** 资产类型：项目内平铺的一份声明，与资产放在哪个文件夹无关 */
 export interface Category {
+  id: number
+  project_id: number
+  name: string
+  sort_order: number
+  is_system: boolean
+  asset_count: number
+}
+
+/** 文件夹（目录）：Windows 资源管理器式的层级 */
+export interface Folder {
   id: number
   project_id: number
   parent_id?: number | null
   name: string
   sort_order: number
-  is_system: boolean
+  /** 直接放在该文件夹里的资产数 */
   asset_count: number
   /** 整个子树（含子孙文件夹）里的资产总数 */
   subtree_asset_count: number
@@ -53,6 +64,7 @@ export interface Asset {
   id: number
   project_id: number
   category_id: number | null
+  folder_id: number | null
   name: string
   description?: string | null
   tags: string[]
@@ -64,6 +76,7 @@ export interface Asset {
   created_by: number
   creator?: UserBrief | null
   category_name?: string | null
+  folder_name?: string | null
   project_name?: string | null
   project_slug?: string | null
   project_owner?: UserBrief | null
@@ -96,11 +109,13 @@ export interface Project {
   created_at?: string
   asset_count: number
   category_count: number
+  folder_count: number
   member_count: number
   pending_count: number
   /** 广场热度值（仅 /projects/plaza 返回） */
   heat?: number
   categories?: Category[]
+  folders?: Folder[]
   members?: ProjectMember[]
   pending_members?: ProjectMember[]
 }

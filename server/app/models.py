@@ -52,6 +52,12 @@ class Project(Base):
         cascade="all, delete-orphan",
         order_by="Category.sort_order",
     )
+    folders = relationship(
+        "Folder",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="Folder.sort_order",
+    )
     assets = relationship(
         "Asset", back_populates="project", cascade="all, delete-orphan"
     )
@@ -76,22 +82,41 @@ class ProjectMember(Base):
 
 
 class Category(Base):
+    """资产类型：项目内平铺的一份声明式分类（模型 / 贴图与材质 / …）。
+
+    只是打在资产上的一个标签，与资产放在哪个文件夹无关。
+    """
+
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # 父文件夹（自引用），NULL 表示顶层文件夹；用于 Windows 资源管理器式层级
-    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     name = Column(String, nullable=False)
     sort_order = Column(Integer, default=0)
     is_system = Column(Boolean, default=False)
 
     project = relationship("Project", back_populates="categories")
-    parent = relationship("Category", remote_side=[id], back_populates="children")
-    children = relationship(
-        "Category", back_populates="parent", cascade="all, delete-orphan"
-    )
     assets = relationship("Asset", back_populates="category")
+
+
+class Folder(Base):
+    """项目内的文件夹（目录），Windows 资源管理器式的层级，用于把资产分层归类。"""
+
+    __tablename__ = "folders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # 父文件夹，NULL 表示顶层文件夹
+    parent_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
+    name = Column(String, nullable=False)
+    sort_order = Column(Integer, default=0)
+
+    project = relationship("Project", back_populates="folders")
+    parent = relationship("Folder", remote_side=[id], back_populates="children")
+    children = relationship(
+        "Folder", back_populates="parent", cascade="all, delete-orphan"
+    )
+    assets = relationship("Asset", back_populates="folder")
 
 
 class Asset(Base):
@@ -99,8 +124,10 @@ class Asset(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    # NULL 表示资产位于项目根目录（对应 Windows 资源管理器的盘符根目录）
+    # 资产类型（声明用，可空）
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    # 所在文件夹，NULL 表示位于项目根目录
+    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     tags = Column(JSON, default=list)
@@ -115,6 +142,7 @@ class Asset(Base):
 
     project = relationship("Project", back_populates="assets")
     category = relationship("Category", back_populates="assets")
+    folder = relationship("Folder", back_populates="assets")
     creator = relationship("User")
     versions = relationship(
         "AssetVersion",

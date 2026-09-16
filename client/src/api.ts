@@ -7,6 +7,7 @@ import type {
   Category,
   Comment,
   DownloadStats,
+  Folder,
   Invitation,
   LeaderboardResponse,
   Notification,
@@ -119,20 +120,30 @@ export const api = {
   getUserProfileByUsername: (username: string) =>
     client.get<UserProfile>(`/users/by-username/${username}`).then((r) => r.data),
 
-  // ---------- 分类 ----------
+  // ---------- 资产类型（分类） ----------
   listCategories: (projectId: number) =>
     client.get<Category[]>(`/projects/${projectId}/categories`).then((r) => r.data),
-  createCategory: (projectId: number, name: string, parentId?: number | null) =>
+  createCategory: (projectId: number, name: string) =>
+    client.post<Category>(`/projects/${projectId}/categories`, { name }).then((r) => r.data),
+  updateCategory: (categoryId: number, data: { name?: string; sort_order?: number }) =>
+    client.patch<Category>(`/categories/${categoryId}`, data).then((r) => r.data),
+  deleteCategory: (categoryId: number) =>
+    client.delete(`/categories/${categoryId}`).then((r) => r.data),
+
+  // ---------- 文件夹 ----------
+  listFolders: (projectId: number) =>
+    client.get<Folder[]>(`/projects/${projectId}/folders`).then((r) => r.data),
+  createFolder: (projectId: number, name: string, parentId?: number | null) =>
     client
-      .post<Category>(`/projects/${projectId}/categories`, {
+      .post<Folder>(`/projects/${projectId}/folders`, {
         name,
         parent_id: parentId ?? null,
       })
       .then((r) => r.data),
-  updateCategory: (categoryId: number, data: { name?: string; sort_order?: number; parent_id?: number }) =>
-    client.patch<Category>(`/categories/${categoryId}`, data).then((r) => r.data),
-  deleteCategory: (categoryId: number) =>
-    client.delete(`/categories/${categoryId}`).then((r) => r.data),
+  updateFolder: (folderId: number, data: { name?: string; sort_order?: number; parent_id?: number }) =>
+    client.patch<Folder>(`/folders/${folderId}`, data).then((r) => r.data),
+  deleteFolder: (folderId: number) =>
+    client.delete(`/folders/${folderId}`).then((r) => r.data),
 
   // ---------- 资产 ----------
   listAssets: (projectId: number, params?: Record<string, unknown>) =>
@@ -142,9 +153,9 @@ export const api = {
   updateAsset: (id: number, form: FormData) =>
     client.patch<Asset>(`/assets/${id}`, form).then((r) => r.data),
   deleteAsset: (id: number) => client.delete(`/assets/${id}`).then((r) => r.data),
-  /** 把资产移动到指定文件夹（分类） */
-  moveAsset: (id: number, categoryId: number) =>
-    client.patch<Asset>(`/assets/${id}/category`, { category_id: categoryId }).then((r) => r.data),
+  /** 把资产移动到指定文件夹（0 = 项目根目录） */
+  moveAsset: (id: number, folderId: number) =>
+    client.patch<Asset>(`/assets/${id}/folder`, { folder_id: folderId }).then((r) => r.data),
 
   // ---------- 版本 ----------
   listVersions: (assetId: number) =>

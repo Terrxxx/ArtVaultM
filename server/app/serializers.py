@@ -1,6 +1,6 @@
 from typing import Optional
 
-from .models import Asset, AssetVersion, Category, Project, ProjectMember, User
+from .models import Asset, AssetVersion, Category, Folder, Project, ProjectMember, User
 from .services import storage
 
 
@@ -72,6 +72,7 @@ def asset_to_dict(
         "id": a.id,
         "project_id": a.project_id,
         "category_id": a.category_id,
+        "folder_id": a.folder_id,
         "name": a.name,
         "description": a.description,
         "tags": a.tags or [],
@@ -85,6 +86,7 @@ def asset_to_dict(
         "created_by": a.created_by,
         "creator": user_brief(a.creator),
         "category_name": a.category.name if a.category else None,
+        "folder_name": a.folder.name if a.folder else None,
         "project_name": a.project.name if a.project else None,
         "project_slug": a.project.slug if a.project else None,
         "project_owner": user_brief(a.project.owner) if a.project else None,
@@ -103,11 +105,11 @@ def asset_to_dict(
     return data
 
 
-def subtree_counts(c: Category) -> tuple:
+def subtree_counts(f: Folder) -> tuple:
     """返回 (子树内资产总数, 子树内子文件夹总数)。两者都包含整棵子树，用于删除确认文案。"""
-    assets = len(c.assets)
+    assets = len(f.assets)
     folders = 0
-    stack = list(c.children)
+    stack = list(f.children)
     while stack:
         node = stack.pop()
         folders += 1
@@ -117,15 +119,26 @@ def subtree_counts(c: Category) -> tuple:
 
 
 def category_to_dict(c: Category) -> dict:
-    subtree_assets, subtree_folders = subtree_counts(c)
+    """资产类型：平铺的一份声明。"""
     return {
         "id": c.id,
         "project_id": c.project_id,
-        "parent_id": c.parent_id,
         "name": c.name,
         "sort_order": c.sort_order,
         "is_system": c.is_system,
         "asset_count": len(c.assets),
+    }
+
+
+def folder_to_dict(f: Folder) -> dict:
+    subtree_assets, subtree_folders = subtree_counts(f)
+    return {
+        "id": f.id,
+        "project_id": f.project_id,
+        "parent_id": f.parent_id,
+        "name": f.name,
+        "sort_order": f.sort_order,
+        "asset_count": len(f.assets),
         "subtree_asset_count": subtree_assets,
         "subtree_folder_count": subtree_folders,
     }
@@ -141,7 +154,10 @@ def member_to_dict(m: ProjectMember) -> dict:
 
 
 def project_to_dict(
-    p: Project, include_categories: bool = False, include_members: bool = False
+    p: Project,
+    include_categories: bool = False,
+    include_members: bool = False,
+    include_folders: bool = False,
 ) -> dict:
     accepted = [m for m in p.members if m.status == "accepted"]
     pending = [m for m in p.members if m.status != "accepted"]
@@ -159,11 +175,14 @@ def project_to_dict(
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "asset_count": len(p.assets),
         "category_count": len(p.categories),
+        "folder_count": len(p.folders),
         "member_count": len(accepted),
         "pending_count": len(pending),
     }
     if include_categories:
         data["categories"] = [category_to_dict(c) for c in p.categories]
+    if include_folders:
+        data["folders"] = [folder_to_dict(f) for f in p.folders]
     if include_members:
         data["members"] = [member_to_dict(m) for m in accepted]
         data["pending_members"] = [member_to_dict(m) for m in pending]

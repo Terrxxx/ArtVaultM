@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button, Form, Input, Modal, Select, Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
@@ -9,9 +9,10 @@ const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
 interface Props {
   open: boolean
   projectId: number
+  /** 可选的资产类型（声明用，可以留空） */
   categories: Category[]
-  /** 当前所在文件夹（0 = 根目录），上传时预填 */
-  defaultCategoryId?: number
+  /** 上传到哪个文件夹（0 = 项目根目录），就是当前浏览到的目录 */
+  folderId: number
   onClose: () => void
   onSuccess: () => void
 }
@@ -20,24 +21,20 @@ export default function UploadAssetModal({
   open,
   projectId,
   categories,
-  defaultCategoryId = 0,
+  folderId,
   onClose,
   onSuccess,
 }: Props) {
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      form.setFieldValue('category_id', defaultCategoryId)
-    }
-  }, [open, defaultCategoryId, form])
-
   const onOk = async () => {
     const values = await form.validateFields()
     const fd = new FormData()
     fd.append('project_id', String(projectId))
-    fd.append('category_id', String(values.category_id ?? 0))
+    // 落在当前所在目录，不需要用户选
+    fd.append('folder_id', String(folderId))
+    if (values.category_id) fd.append('category_id', String(values.category_id))
     fd.append('name', values.name)
     if (values.description) fd.append('description', values.description)
     if (values.tags) fd.append('tags', values.tags)
@@ -59,11 +56,6 @@ export default function UploadAssetModal({
     }
   }
 
-  const categoryOptions = [
-    { value: 0, label: '根目录' },
-    ...categories.map((c) => ({ value: c.id, label: c.name })),
-  ]
-
   return (
     <Modal
       title="上传资产"
@@ -74,8 +66,16 @@ export default function UploadAssetModal({
       width={560}
     >
       <Form form={form} layout="vertical">
-        <Form.Item name="category_id" label="文件夹" rules={[{ required: true, message: '请选择文件夹' }]}>
-          <Select placeholder="选择文件夹" options={categoryOptions} />
+        <Form.Item
+          name="category_id"
+          label="资产类型"
+          extra="只是给资产打个声明，和它放在哪个文件夹没有关系；可以留空"
+        >
+          <Select
+            allowClear
+            placeholder="未分类"
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+          />
         </Form.Item>
         <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
           <Input placeholder="如：英雄模型" />

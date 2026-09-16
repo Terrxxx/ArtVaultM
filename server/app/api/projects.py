@@ -8,6 +8,7 @@ from ..models import Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
 from ..serializers import project_to_dict
 from ..services import stats
+from ..services.asset_types import seed_default_categories
 from ..services.slug import slugify
 from .deps import (
     ensure_project_access,
@@ -52,9 +53,12 @@ def create_project(
     db.add(project)
     db.flush()
 
+    # 默认资产类型；文件夹不预建，由用户在项目页按需创建
+    seed_default_categories(db, project.id)
+
     db.commit()
     db.refresh(project)
-    return project_to_dict(project, include_categories=True)
+    return project_to_dict(project, include_categories=True, include_folders=True)
 
 
 @router.get("/projects")
@@ -98,7 +102,9 @@ def get_project_by_slug(
     if project is None:
         raise HTTPException(status_code=404, detail="项目不存在")
     ensure_project_access(db, project.id, user)
-    return project_to_dict(project, include_categories=True, include_members=True)
+    return project_to_dict(
+        project, include_categories=True, include_members=True, include_folders=True
+    )
 
 
 @router.get("/projects/plaza")
@@ -171,7 +177,9 @@ def get_project(
     user: User = Depends(get_current_user),
 ):
     project = ensure_project_access(db, project_id, user)
-    return project_to_dict(project, include_categories=True, include_members=True)
+    return project_to_dict(
+        project, include_categories=True, include_members=True, include_folders=True
+    )
 
 
 @router.patch("/projects/{project_id}")
@@ -194,7 +202,9 @@ def update_project(
     # slug 不随改名变化，避免已分享的链接失效
     db.commit()
     db.refresh(project)
-    return project_to_dict(project, include_categories=True, include_members=True)
+    return project_to_dict(
+        project, include_categories=True, include_members=True, include_folders=True
+    )
 
 
 @router.delete("/projects/{project_id}")

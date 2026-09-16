@@ -227,8 +227,9 @@ server {
 | 项目 | `POST/GET /projects` · `GET /projects/plaza` · `GET /projects/by-slug/{username}/{slug}` · `PATCH/DELETE /projects/{id}` |
 | 项目成员 | `GET/POST /projects/{id}/members` · `DELETE /projects/{id}/members/{memberId}` |
 | 邀请 | `GET /invitations` · `POST /invitations/{id}/accept` · `POST /invitations/{id}/decline` |
-| 分类 | `GET/POST /projects/{id}/categories` · `PATCH/DELETE /categories/{id}` |
-| 资产 | `GET/POST /projects/{id}/assets` · `GET/PATCH/DELETE /assets/{id}` |
+| 资产类型 | `GET/POST /projects/{id}/categories` · `PATCH/DELETE /categories/{id}`（项目内平铺的声明式分类） |
+| 文件夹 | `GET/POST /projects/{id}/folders` · `PATCH/DELETE /folders/{id}`（层级目录，用于归类资产） |
+| 资产 | `GET/POST /projects/{id}/assets` · `GET/PATCH/DELETE /assets/{id}` · `PATCH /assets/{id}/folder` |
 | 版本 | `GET/POST /assets/{id}/versions` · `GET /versions/{id}/download-url` · `DELETE /versions/{id}` |
 | 预览 | `GET /versions/{id}/stream-token` · `GET /versions/{id}/stream?t=` |
 | 评论 | `GET/POST /assets/{id}/comments` · `DELETE /comments/{id}` |

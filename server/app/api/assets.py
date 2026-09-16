@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Asset, AssetVersion, Category, Project, User
+from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict
 from ..services import notify, storage, storage_config
@@ -62,6 +62,7 @@ def _find_reusable_version(
 @router.get("/projects/{project_id}/assets")
 def list_assets(
     project_id: int,
+    folder_id: Optional[int] = None,
     category_id: Optional[int] = None,
     q: Optional[str] = None,
     tag: Optional[str] = None,
@@ -72,10 +73,13 @@ def list_assets(
     ensure_project_access(db, project_id, user)
     base = db.query(Asset).filter(Asset.project_id == project_id)
 
-    # 0 表示根目录（category_id 为 NULL），与前端「0 = 根」哨兵保持一致
-    if category_id == 0:
-        base = base.filter(Asset.category_id.is_(None))
-    elif category_id:
+    # 0 表示根目录（folder_id 为 NULL），与前端「0 = 根」哨兵保持一致
+    if folder_id == 0:
+        base = base.filter(Asset.folder_id.is_(None))
+    elif folder_id:
+        base = base.filter(Asset.folder_id == folder_id)
+
+    if category_id:
         base = base.filter(Asset.category_id == category_id)
 
     # 项目内全局搜索：资产名 / 描述 / 标签 / 版本文件名 / 上传者昵称或用户名
@@ -117,6 +121,7 @@ def list_assets(
 @router.post("/assets")
 def create_asset(
     project_id: int = Form(...),
+    folder_id: Optional[int] = Form(None),
     category_id: Optional[int] = Form(None),
     name: str = Form(...),
     description: Optional[str] = Form(None),
@@ -129,15 +134,24 @@ def create_asset(
 ):
     project = ensure_project_access(db, project_id, user, write=True)
     # 0/None 表示放到项目根目录
+    asset_folder_id: Optional[int] = None
+    if folder_id:
+        folder = db.get(Folder, folder_id)
+        if folder is None or folder.project_id != project_id:
+            raise HTTPException(status_code=400, detail="文件夹不存在或不属于该项目")
+        asset_folder_id = folder_id
+
+    # 资产类型是选填的声明，可以为空
     asset_category_id: Optional[int] = None
     if category_id:
         category = db.get(Category, category_id)
         if category is None or category.project_id != project_id:
-            raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
+            raise HTTPException(status_code=400, detail="资产类型不存在或不属于该项目")
         asset_category_id = category_id
 
     asset = Asset(
         project_id=project_id,
+        folder_id=asset_folder_id,
         category_id=asset_category_id,
         name=name,
         description=description,
@@ -270,13 +284,13 @@ def update_asset(
     if tags is not None:
         asset.tags = _parse_tags(tags)
     if category_id is not None:
-        # 0 表示移到根目录（category_id = NULL）
+        # 0 表示清空资产类型
         if category_id == 0:
             asset.category_id = None
         else:
             category = db.get(Category, category_id)
             if category is None or category.project_id != asset.project_id:
-                raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
+                raise HTTPException(status_code=400, detail="资产类型不存在或不属于该项目")
             asset.category_id = category_id
 
     # 换封面：只改资产级封面（含 42×42 小图），不动任何版本的缩略图
@@ -301,14 +315,14 @@ def update_asset(
     return asset_to_dict(asset, include_versions=True, current_user_id=user.id)
 
 
-@router.patch("/assets/{asset_id}/category")
+@router.patch("/assets/{asset_id}/folder")
 def move_asset(
     asset_id: int,
     payload: AssetMoveRequest,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """把资产移动到指定文件夹（分类）。
+    """把资产移动到指定文件夹。
 
     项目所有者/高级管理员可移动项目内任意资产，成员仅可移动自己创建的。
     """
@@ -326,14 +340,14 @@ def move_asset(
             status_code=403, detail="仅资产创建者或项目所有者可移动该资产"
         )
 
-    if payload.category_id:
-        category = db.get(Category, payload.category_id)
-        if category is None or category.project_id != asset.project_id:
+    if payload.folder_id:
+        folder = db.get(Folder, payload.folder_id)
+        if folder is None or folder.project_id != asset.project_id:
             raise HTTPException(status_code=400, detail="文件夹不存在或不属于该项目")
-        asset.category_id = payload.category_id
+        asset.folder_id = payload.folder_id
     else:
         # 0 表示移到项目根目录
-        asset.category_id = None
+        asset.folder_id = None
     db.commit()
     db.refresh(asset)
     return asset_to_dict(asset, current_user_id=user.id)

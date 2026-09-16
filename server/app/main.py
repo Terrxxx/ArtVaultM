@@ -14,6 +14,7 @@ from .api import (
     auth,
     categories,
     comments,
+    folders,
     likes,
     members,
     notifications,
@@ -27,6 +28,7 @@ from .core.security import hash_password
 from .database import Base, SessionLocal, engine
 from .models import Asset, Project, User
 from .services import storage_config
+from .services.asset_types import DEFAULT_ASSET_TYPES
 from .services.slug import slugify
 
 # 已存在的表需要补的新列（无 Alembic，用幂等 ALTER 兜底）
@@ -43,10 +45,8 @@ WANTED_COLUMNS = {
     "project_members": {
         "status": "VARCHAR DEFAULT 'pending'",
     },
-    "categories": {
-        "parent_id": "INTEGER REFERENCES categories(id)",
-    },
     "assets": {
+        "folder_id": "INTEGER REFERENCES folders(id)",
         "cover_thumbnail_storage": "VARCHAR DEFAULT 'local'",
         "small_thumbnail": "VARCHAR",
         "small_thumbnail_storage": "VARCHAR DEFAULT 'local'",
@@ -120,6 +120,49 @@ def migrate_asset_category_nullable() -> None:
         raw.close()
 
 
+def migrate_folders_from_categories() -> None:
+    """把原先兼职当文件夹用的 categories 拆成两套。
+
+    旧结构里 categories 既是「文件夹」又是资产归属，这里：
+    - 整棵树照搬到新的 folders 表（id 保持不变，assets.folder_id 直接沿用旧 category_id）
+    - categories 清空后还原成平铺的「资产类型」，并按默认列表给每个项目补一份
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("folders") or not inspector.has_table("categories"):
+        return
+    with engine.begin() as conn:
+        if conn.execute(text("SELECT COUNT(*) FROM folders")).scalar():
+            return  # 已经迁移过
+        if not conn.execute(text("SELECT COUNT(*) FROM categories")).scalar():
+            return  # 没有旧数据（新库），新项目由 create_project 补默认类型
+
+        # 迁移前先备份数据库文件，失败时可手动恢复
+        import shutil
+
+        if settings.database_url.startswith("sqlite"):
+            db_file = settings.database_url[len("sqlite:///") :]
+            if os.path.exists(db_file):
+                shutil.copy2(db_file, f"{db_file}.bak")
+
+        conn.execute(
+            text(
+                "INSERT INTO folders (id, project_id, parent_id, name, sort_order) "
+                "SELECT id, project_id, parent_id, name, sort_order FROM categories"
+            )
+        )
+        conn.execute(text("UPDATE assets SET folder_id = category_id"))
+        conn.execute(text("UPDATE assets SET category_id = NULL"))
+        conn.execute(text("DELETE FROM categories"))
+        for i, name in enumerate(DEFAULT_ASSET_TYPES):
+            conn.execute(
+                text(
+                    "INSERT INTO categories (project_id, name, sort_order, is_system) "
+                    "SELECT id, :name, :sort_order, 1 FROM projects"
+                ),
+                {"name": name, "sort_order": i},
+            )
+
+
 def backfill_slugs() -> None:
     """给历史项目补 slug，并把历史成员记录视为已接受。"""
     db: Session = SessionLocal()
@@ -188,6 +231,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_columns()
     migrate_asset_category_nullable()
+    migrate_folders_from_categories()
     backfill_slugs()
     seed_admin()
     # 把对象存储配置载入进程内缓存，供序列化器生成图片 URL
@@ -216,6 +260,7 @@ app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(projects.router, prefix="/api", tags=["projects"])
 app.include_router(members.router, prefix="/api", tags=["members"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
+app.include_router(folders.router, prefix="/api", tags=["folders"])
 app.include_router(assets.router, prefix="/api", tags=["assets"])
 app.include_router(versions.router, prefix="/api", tags=["versions"])
 app.include_router(comments.router, prefix="/api", tags=["comments"])

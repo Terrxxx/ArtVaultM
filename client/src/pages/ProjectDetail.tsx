@@ -37,7 +37,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
-import type { ActivityResponse, Asset, Category, LeaderboardItem, Project } from '../types'
+import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
@@ -70,17 +70,18 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   // 拖拽时跟随光标的图标（离屏渲染，交给 setDragImage）
   const dragIconRef = useRef<HTMLDivElement>(null)
   // 重命名文件夹弹窗
-  const [renameTarget, setRenameTarget] = useState<Category | null>(null)
+  const [renameTarget, setRenameTarget] = useState<Folder | null>(null)
   const [renameName, setRenameName] = useState('')
   const [renameSubmitting, setRenameSubmitting] = useState(false)
   // 删除文件夹确认弹窗（仅文件夹内有资产时使用）
-  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
-  const categories: Category[] = project.categories || []
+  // 文件夹（目录）与「资产类型」是两套东西：这里导航用的是 folders
+  const folders: Folder[] = project.folders || []
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,7 +92,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       ])
       setProject(fresh)
       setSubscribed(subs.some((s) => s.target_type === 'project' && s.target_id === project.id))
-      const params: Record<string, unknown> = { category_id: folderId }
+      const params: Record<string, unknown> = { folder_id: folderId }
       if (q) params.q = q
       setAssets(await api.listAssets(project.id, params))
     } catch (e: any) {
@@ -143,18 +144,18 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   // 整理文件夹（新建/重命名/移动/删空文件夹）：项目成员即可
   const canManageFolder = isMember
   // 删除会连资产一起删的文件夹：仅项目创建者或高级管理员
-  const canDeleteFolder = (c: Category) => canEdit || !c.subtree_asset_count
+  const canDeleteFolder = (c: Folder) => canEdit || !c.subtree_asset_count
   // 删除时需要输入名称二次确认：整个子树里有资产或有子文件夹
-  const needsConfirm = (c: Category) => c.subtree_asset_count > 0 || c.subtree_folder_count > 0
+  const needsConfirm = (c: Folder) => c.subtree_asset_count > 0 || c.subtree_folder_count > 0
 
   // 当前文件夹下的子文件夹
-  const childFolders = categories.filter((c) => (c.parent_id || 0) === folderId)
+  const childFolders = folders.filter((c) => (c.parent_id || 0) === folderId)
 
   // 面包屑链：从当前 folderId 向上回溯到根
-  const chain: Category[] = []
+  const chain: Folder[] = []
   let cursor = folderId
   while (cursor) {
-    const c = categories.find((x) => x.id === cursor)
+    const c = folders.find((x) => x.id === cursor)
     if (!c) break
     chain.unshift(c)
     cursor = c.parent_id || 0
@@ -174,7 +175,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     if (!folderName.trim()) return
     setFolderSubmitting(true)
     try {
-      await api.createCategory(project.id, folderName.trim(), folderId || null)
+      await api.createFolder(project.id, folderName.trim(), folderId || null)
       message.success('已创建文件夹')
       setFolderName('')
       setFolderOpen(false)
@@ -196,9 +197,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
-  const moveCategory = async (categoryId: number, targetFolderId: number) => {
+  const moveFolder = async (folderToMoveId: number, targetFolderId: number) => {
     try {
-      await api.updateCategory(categoryId, { parent_id: targetFolderId })
+      await api.updateFolder(folderToMoveId, { parent_id: targetFolderId })
       message.success('已移动文件夹')
       load()
     } catch (e: any) {
@@ -210,7 +211,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     if (!renameTarget || !renameName.trim()) return
     setRenameSubmitting(true)
     try {
-      await api.updateCategory(renameTarget.id, { name: renameName.trim() })
+      await api.updateFolder(renameTarget.id, { name: renameName.trim() })
       message.success('已重命名')
       setRenameTarget(null)
       setRenameName('')
@@ -223,16 +224,16 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   }
 
   // 删除确认文案：整个子树会删掉多少东西
-  const deleteSummary = (c: Category) => {
+  const deleteSummary = (c: Folder) => {
     const parts: string[] = []
     if (c.subtree_folder_count) parts.push(`${c.subtree_folder_count} 个子文件夹`)
     if (c.subtree_asset_count) parts.push(`${c.subtree_asset_count} 个资产`)
     return parts.join('、')
   }
 
-  const removeFolder = async (category: Category) => {
+  const removeFolder = async (target: Folder) => {
     try {
-      await api.deleteCategory(category.id)
+      await api.deleteFolder(target.id)
       message.success('文件夹已删除')
       setDeleteTarget(null)
       setDeleteInput('')
@@ -243,12 +244,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   }
 
   // 子树里有资产或有子文件夹的，要输入名称二次确认（会一并删掉），空的直接删
-  const requestDeleteFolder = (category: Category) => {
-    if (!needsConfirm(category)) {
-      removeFolder(category)
+  const requestDeleteFolder = (target: Folder) => {
+    if (!needsConfirm(target)) {
+      removeFolder(target)
       return
     }
-    setDeleteTarget(category)
+    setDeleteTarget(target)
     setDeleteInput('')
   }
 
@@ -294,7 +295,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       if (!id) return
       if (kind === 'asset') moveAsset(id, targetId)
       // 文件夹不能移入自己
-      else if (kind === 'folder' && id !== targetId) moveCategory(id, targetId)
+      else if (kind === 'folder' && id !== targetId) moveFolder(id, targetId)
     },
   })
 
@@ -597,8 +598,8 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       <UploadAssetModal
         open={uploadOpen}
         projectId={project.id}
-        categories={categories}
-        defaultCategoryId={folderId}
+        categories={project.categories || []}
+        folderId={folderId}
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />

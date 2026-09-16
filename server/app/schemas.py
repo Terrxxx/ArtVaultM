@@ -88,20 +88,30 @@ class StorageConfigIn(BaseModel):
     cos_prefix: Optional[str] = None
 
 
-# ---------- 资产关联 ----------
 # ---------- 资产移动（文件夹） ----------
 class AssetMoveRequest(BaseModel):
-    category_id: int = 0  # 0 表示根目录
+    folder_id: int = 0  # 0 表示根目录
 
 
-# ---------- 分类 ----------
+# ---------- 资产类型（分类） ----------
 class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1)
+    sort_order: int = 0
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+# ---------- 文件夹 ----------
+class FolderCreate(BaseModel):
     name: str = Field(min_length=1)
     sort_order: int = 0
     parent_id: Optional[int] = None
 
 
-class CategoryUpdate(BaseModel):
+class FolderUpdate(BaseModel):
     name: Optional[str] = None
     sort_order: Optional[int] = None
     parent_id: Optional[int] = None  # 0 = 根目录；None = 不修改
