@@ -1,12 +1,15 @@
 import { Select, Space, Tooltip, Typography } from 'antd'
 import type { ActivityItem } from '../types'
 
-const CELL = 13
+const CELL = 11
 const GAP = 3
 const ROWS = 7
 
 // 0 次 + 4 档强度
 const COLORS = ['var(--av-heat-0)', 'var(--av-heat-1)', 'var(--av-heat-2)', 'var(--av-heat-3)', 'var(--av-heat-4)']
+
+// 每格描一圈极淡的边，让相邻格子之间有缝隙感（和 GitHub 贡献图一致）
+const CELL_EDGE = 'inset 0 0 0 1px var(--av-heat-border)'
 
 /** 「最近一年」的哨兵值（滚动 12 个月），其余值为具体年份 */
 export const RECENT = 'recent'
@@ -108,12 +111,16 @@ export default function Heatmap({
             gridAutoColumns: `${CELL}px`,
             gap: GAP,
             overflowX: 'auto',
-            paddingBottom: 4,
+            // 图区自带一层底色（暗色下是页面底 #0d1117），空格子才不会和卡片糊在一起
+            background: 'var(--av-heat-canvas)',
+            borderRadius: 6,
+            padding: 8,
             opacity: loading ? 0.4 : 1,
           }}
         >
           {cells.map((c) => {
             const selected = selectedDate === c.date
+            const blank = c.future || !c.inRange
             return (
               <Tooltip key={c.date} title={`${c.date}　${c.count} 次更新`}>
                 <div
@@ -121,13 +128,10 @@ export default function Heatmap({
                   style={{
                     width: CELL,
                     height: CELL,
-                    borderRadius: 2,
-                    background: c.future || !c.inRange ? 'transparent' : COLORS[level(c.count)],
-                    outline: selected
-                      ? '2px solid var(--av-primary)'
-                      : c.future || !c.inRange
-                        ? 'none'
-                        : '1px solid var(--av-heat-border)',
+                    borderRadius: 3,
+                    background: blank ? 'transparent' : COLORS[level(c.count)],
+                    boxShadow: blank ? undefined : CELL_EDGE,
+                    outline: selected ? '2px solid var(--av-primary)' : undefined,
                     outlineOffset: 1,
                     cursor: c.inRange ? 'pointer' : 'default',
                   }}
@@ -148,12 +152,22 @@ export default function Heatmap({
               ...years.map((y) => ({ value: y, label: `${y} 年` })),
             ]}
           />
+          {/* 图例和格子用同一套底色 + 描边，否则暗色下最浅那格会看不见 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               少
             </Typography.Text>
             {COLORS.map((c) => (
-              <div key={c} style={{ width: CELL, height: CELL, borderRadius: 2, background: c }} />
+              <div
+                key={c}
+                style={{
+                  width: CELL,
+                  height: CELL,
+                  borderRadius: 3,
+                  background: c,
+                  boxShadow: CELL_EDGE,
+                }}
+              />
             ))}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               多
