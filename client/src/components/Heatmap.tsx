@@ -1,8 +1,8 @@
 import { Select, Space, Tooltip, Typography } from 'antd'
 import type { ActivityItem } from '../types'
 
-const CELL = 11
-const GAP = 3
+const CELL = 15
+const GAP = 4
 const ROWS = 7
 
 // 0 次 + 4 档强度
@@ -111,7 +111,7 @@ export default function Heatmap({
             gridAutoColumns: `${CELL}px`,
             gap: GAP,
             overflowX: 'auto',
-            // 图区自带一层底色（暗色下是页面底 #0d1117），空格子才不会和卡片糊在一起
+            // 图区自带一层底色（暗色下与卡片同色），空格子才有一块稳定的底可衬
             background: 'var(--av-heat-canvas)',
             borderRadius: 6,
             padding: 8,
@@ -128,7 +128,7 @@ export default function Heatmap({
                   style={{
                     width: CELL,
                     height: CELL,
-                    borderRadius: 3,
+                    borderRadius: 4,
                     background: blank ? 'transparent' : COLORS[level(c.count)],
                     boxShadow: blank ? undefined : CELL_EDGE,
                     outline: selected ? '2px solid var(--av-primary)' : undefined,
@@ -163,7 +163,7 @@ export default function Heatmap({
                 style={{
                   width: CELL,
                   height: CELL,
-                  borderRadius: 3,
+                  borderRadius: 4,
                   background: c,
                   boxShadow: CELL_EDGE,
                 }}
