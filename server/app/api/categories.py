@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Category, User
 from ..schemas import CategoryCreate, CategoryUpdate
-from ..serializers import category_to_dict
+from ..serializers import categories_in_display_order, category_to_dict
 from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
@@ -17,13 +17,8 @@ def list_categories(
     user: User = Depends(get_current_user),
 ):
     ensure_project_access(db, project_id, user)
-    categories = (
-        db.query(Category)
-        .filter(Category.project_id == project_id)
-        .order_by(Category.sort_order)
-        .all()
-    )
-    return [category_to_dict(c) for c in categories]
+    categories = db.query(Category).filter(Category.project_id == project_id).all()
+    return [category_to_dict(c) for c in categories_in_display_order(categories)]
 
 
 @router.post("/projects/{project_id}/categories")

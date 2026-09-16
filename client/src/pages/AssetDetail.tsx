@@ -27,7 +27,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, downloadVersion, formatSize, userPath } from '../api'
+import { api, downloadVersion, formatSize, projectPath, userPath } from '../api'
 import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
@@ -98,11 +98,18 @@ export default function AssetDetail() {
     message.success(now ? '已订阅该资产更新' : '已取消订阅')
   }
 
+  // 返回项目时落回该资产所在的文件夹，而不是项目根目录
+  const projectHref = `${projectPath({
+    id: asset.project_id,
+    slug: asset.project_slug,
+    owner: asset.project_owner,
+  })}${asset.folder_id ? `?folder=${asset.folder_id}` : ''}`
+
   return (
     <div>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Space>
-          <Link to={`/projects/${asset.project_id}`}>
+          <Link to={projectHref}>
             <ArrowLeftOutlined /> 返回项目
           </Link>
         </Space>

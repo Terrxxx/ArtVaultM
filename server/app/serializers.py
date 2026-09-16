@@ -118,6 +118,16 @@ def subtree_counts(f: Folder) -> tuple:
     return assets, folders
 
 
+def categories_in_display_order(categories) -> list:
+    """资产类型的展示顺序：自己新建的置顶（越新越靠前，id 递增即创建顺序），
+    系统预置的按原有顺序跟在后面。"""
+    custom = sorted(
+        (c for c in categories if not c.is_system), key=lambda c: c.id, reverse=True
+    )
+    system = sorted((c for c in categories if c.is_system), key=lambda c: c.sort_order)
+    return custom + system
+
+
 def category_to_dict(c: Category) -> dict:
     """资产类型：平铺的一份声明。"""
     return {
@@ -180,7 +190,9 @@ def project_to_dict(
         "pending_count": len(pending),
     }
     if include_categories:
-        data["categories"] = [category_to_dict(c) for c in p.categories]
+        data["categories"] = [
+            category_to_dict(c) for c in categories_in_display_order(p.categories)
+        ]
     if include_folders:
         data["folders"] = [folder_to_dict(f) for f in p.folders]
     if include_members:

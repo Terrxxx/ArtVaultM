@@ -35,7 +35,7 @@ import {
   SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '../types'
 import { isSuperAdmin } from '../types'
@@ -46,10 +46,11 @@ import UploadAssetModal from '../components/UploadAssetModal'
 import { useAuthStore } from '../store'
 
 function ProjectDetailView({ project: initial }: { project: Project }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [project, setProject] = useState(initial)
   const [assets, setAssets] = useState<Asset[]>([])
-  // 当前所在文件夹：0 = 项目根目录
-  const [folderId, setFolderId] = useState(0)
+  // 当前所在文件夹：0 = 项目根目录。初值取自 ?folder=，从资产页返回时才能落回原目录
+  const [folderId, setFolderId] = useState(() => Number(searchParams.get('folder')) || 0)
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -79,6 +80,15 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
+
+  // 进/出文件夹时同步 ?folder=，这样刷新、分享、从资产页返回都能落回同一个目录
+  const gotoFolder = (id: number) => {
+    setFolderId(id)
+    const next = new URLSearchParams(searchParams)
+    if (id) next.set('folder', String(id))
+    else next.delete('folder')
+    setSearchParams(next, { replace: true })
+  }
 
   // 文件夹（目录）与「资产类型」是两套东西：这里导航用的是 folders
   const folders: Folder[] = project.folders || []
@@ -417,14 +427,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
 
         {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-          <span {...dropHandlers(0)} onClick={() => setFolderId(0)} style={crumbStyle(0)}>
+          <span {...dropHandlers(0)} onClick={() => gotoFolder(0)} style={crumbStyle(0)}>
             <HomeOutlined style={{ marginRight: 4 }} />
             {project.name}
           </span>
           {chain.map((c) => (
             <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <span style={{ color: '#bbb' }}>/</span>
-              <span {...dropHandlers(c.id)} onClick={() => setFolderId(c.id)} style={crumbStyle(c.id)}>
+              <span {...dropHandlers(c.id)} onClick={() => gotoFolder(c.id)} style={crumbStyle(c.id)}>
                 {c.name}
               </span>
             </span>
@@ -458,7 +468,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                       draggable={canManageFolder}
                       onDragStart={(e) => startDrag(e, `folder:${c.id}`, `folder:${c.id}`)}
                       onDragEnd={endDrag}
-                      onClick={() => setFolderId(c.id)}
+                      onClick={() => gotoFolder(c.id)}
                       style={{ height: '100%', cursor: 'pointer' }}
                     >
                       <Card
@@ -700,6 +710,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { search } = useLocation()
   const [project, setProject] = useState<Project | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -709,16 +720,16 @@ export default function ProjectDetail() {
       .getProject(Number(id))
       .then((p) => {
         if (!alive) return
-        // 统一跳转到规范地址 /用户名/slug
+        // 统一跳转到规范地址 /用户名/slug（保留 ?folder=，否则会丢掉所在目录）
         const canonical = projectPath(p)
-        if (canonical !== `/projects/${p.id}`) navigate(canonical, { replace: true })
+        if (canonical !== `/projects/${p.id}`) navigate(`${canonical}${search}`, { replace: true })
         else setProject(p)
       })
       .catch((e) => alive && setError(e.response?.data?.detail || '项目不存在'))
     return () => {
       alive = false
     }
-  }, [id, navigate])
+  }, [id, navigate, search])
 
   if (error) return <Result status="404" title={error} />
   if (!project) {
