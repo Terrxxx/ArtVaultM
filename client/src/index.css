@@ -115,9 +115,27 @@ body.av-wide .av-content {
   --av-heat-canvas: transparent;
 }
 
+/* 资产详情页两栏：左评论 / 右主体 */
+.av-asset-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.av-asset-main {
+  flex: 1 1 560px;
+  min-width: 0;
+}
+
+.av-rail-comments {
+  flex: 0 0 300px;
+}
+
 /* 屏幕不够宽时中间内容先占满一行，两栏并排落到下面 */
 @media (max-width: 1120px) {
-  .av-project-main {
+  .av-project-main,
+  .av-asset-main {
     flex: 1 1 100%;
     order: -1;
   }
