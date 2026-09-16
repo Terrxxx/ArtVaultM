@@ -5,7 +5,9 @@ import {
   Card,
   Col,
   Descriptions,
+  Dropdown,
   Empty,
+  Input,
   List,
   message,
   Modal,
@@ -14,21 +16,26 @@ import {
   Spin,
   Tag,
   Typography,
+  Upload,
 } from 'antd'
 import {
   ArrowLeftOutlined,
   BellOutlined,
+  DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
   FileOutlined,
   LikeFilled,
   LikeOutlined,
+  MoreOutlined,
+  SwapOutlined,
+  UploadOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, downloadVersion, formatSize, projectPath, userPath } from '../api'
-import type { Asset, Version } from '../types'
+import type { Asset, Project, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
 import UploadVersionModal from '../components/UploadVersionModal'
@@ -43,11 +50,20 @@ export default function AssetDetail() {
   const { id } = useParams()
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
+  // 项目成员列表决定「谁能改这个资产」，单独取一次
+  const [project, setProject] = useState<Project | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
   const [previewTarget, setPreviewTarget] = useState<Version | null>(null)
+  // 换源 / 删除版本
+  const [replaceTarget, setReplaceTarget] = useState<Version | null>(null)
+  const [replaceFile, setReplaceFile] = useState<any[]>([])
+  const [replaceChangelog, setReplaceChangelog] = useState('')
+  const [replaceSubmitting, setReplaceSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Version | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -57,6 +73,7 @@ export default function AssetDetail() {
       const [a, subs] = await Promise.all([api.getAsset(assetId), api.listSubscriptions()])
       setAsset(a)
       setSubscribed(subs.some((s) => s.target_type === 'asset' && s.target_id === assetId))
+      setProject(await api.getProject(a.project_id))
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
     } finally {
@@ -80,7 +97,14 @@ export default function AssetDetail() {
   const versions = asset.versions || []
   // 左上角固定展示资产封面，不随所选版本变化
   const coverSrc = asset.cover_thumbnail_url || null
-  const canWrite = user?.id === asset.created_by || isSuperAdmin(user?.role)
+  // 项目内的资产由项目成员共同维护：改资料、传新版本、换源、删历史版本都能做；
+  // 删除整个资产仍然只有创建者或高级管理员能动
+  const canWrite =
+    !!user &&
+    (user.id === asset.created_by ||
+      isSuperAdmin(user.role) ||
+      project?.owner_id === user.id ||
+      (project?.members || []).some((m) => m.user?.id === user.id))
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
 
@@ -96,6 +120,43 @@ export default function AssetDetail() {
     const { subscribed: now } = await api.toggleSubscription('asset', assetId)
     setSubscribed(now)
     message.success(now ? '已订阅该资产更新' : '已取消订阅')
+  }
+
+  // 换源：把该版本的文件换成新上传的，版本号与下载数不变
+  const replaceSource = async () => {
+    const file = replaceFile[0]?.originFileObj
+    if (!replaceTarget || !file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    if (replaceChangelog.trim()) fd.append('changelog', replaceChangelog.trim())
+    setReplaceSubmitting(true)
+    try {
+      await api.replaceVersionSource(replaceTarget.id, fd)
+      message.success('已换源')
+      setReplaceTarget(null)
+      setReplaceFile([])
+      setReplaceChangelog('')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '换源失败')
+    } finally {
+      setReplaceSubmitting(false)
+    }
+  }
+
+  const removeVersion = async () => {
+    if (!deleteTarget) return
+    setDeleteSubmitting(true)
+    try {
+      await api.deleteVersion(deleteTarget.id)
+      message.success('已删除该版本')
+      setDeleteTarget(null)
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '删除失败')
+    } finally {
+      setDeleteSubmitting(false)
+    }
   }
 
   // 返回项目时落回该资产所在的文件夹，而不是项目根目录
@@ -255,6 +316,35 @@ export default function AssetDetail() {
                     >
                       下载
                     </Button>,
+                    canWrite && (
+                      <Dropdown
+                        key="more"
+                        trigger={['click']}
+                        menu={{
+                          items: [
+                            { key: 'replace', icon: <SwapOutlined />, label: '换源' },
+                            {
+                              key: 'delete',
+                              icon: <DeleteOutlined />,
+                              label: v.is_latest ? '删除此版本（最新版本不能删）' : '删除此版本',
+                              danger: true,
+                              disabled: !!v.is_latest,
+                            },
+                          ],
+                          onClick: ({ key }) => {
+                            if (key === 'replace') {
+                              setReplaceTarget(v)
+                              setReplaceFile([])
+                              setReplaceChangelog('')
+                            } else if (key === 'delete') {
+                              setDeleteTarget(v)
+                            }
+                          },
+                        }}
+                      >
+                        <Button icon={<MoreOutlined />} />
+                      </Dropdown>
+                    ),
                   ]}
                 >
                   <List.Item.Meta
@@ -368,6 +458,60 @@ export default function AssetDetail() {
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />
+
+      {/* 换源：只换文件，版本号与下载数不变 */}
+      <Modal
+        title={`换源 · v${replaceTarget?.version ?? ''}`}
+        open={!!replaceTarget}
+        onOk={replaceSource}
+        onCancel={() => {
+          setReplaceTarget(null)
+          setReplaceFile([])
+          setReplaceChangelog('')
+        }}
+        confirmLoading={replaceSubmitting}
+        okText="替换"
+        cancelText="取消"
+        okButtonProps={{ disabled: replaceFile.length === 0 }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            当前文件：{replaceTarget?.file_name}（{formatSize(replaceTarget?.file_size ?? 0)}）
+          </Typography.Text>
+          <Upload
+            beforeUpload={() => false}
+            maxCount={1}
+            fileList={replaceFile}
+            onChange={({ fileList }) => setReplaceFile(fileList)}
+          >
+            <Button icon={<UploadOutlined />}>选择新文件</Button>
+          </Upload>
+          <Input
+            value={replaceChangelog}
+            onChange={(e) => setReplaceChangelog(e.target.value)}
+            placeholder="版本说明（可选，留空则保持不变）"
+          />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            版本号、下载次数与评论都会保留，只把文件换成新的。
+          </Typography.Text>
+        </Space>
+      </Modal>
+
+      {/* 删除历史版本 */}
+      <Modal
+        title={`删除版本 v${deleteTarget?.version ?? ''}`}
+        open={!!deleteTarget}
+        onOk={removeVersion}
+        onCancel={() => setDeleteTarget(null)}
+        confirmLoading={deleteSubmitting}
+        okText="删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+      >
+        <Typography.Text type="danger">
+          该版本的文件与缩略图会被删除，不可恢复；它下面的评论会变成不带版本的通用评论。
+        </Typography.Text>
+      </Modal>
     </div>
   )
 }

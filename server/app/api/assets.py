@@ -272,10 +272,8 @@ def update_asset(
     asset = db.get(Asset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
-    if not can_edit_asset(asset, user):
-        raise HTTPException(
-            status_code=403, detail="仅资产创建者或高级管理员可编辑该资产"
-        )
+    # 项目内的资产由项目成员共同维护：成员/所有者/高级管理员都能改
+    ensure_project_access(db, asset.project_id, user, write=True)
 
     if name is not None:
         asset.name = name

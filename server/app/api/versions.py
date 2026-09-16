@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, Comment, DownloadLog, User
 from ..serializers import version_to_dict
 from ..services import notify, storage, storage_config
-from .deps import can_edit_asset, ensure_project_access, get_current_user
+from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
 
@@ -307,6 +307,83 @@ def stream_version(
     return FileResponse(path)
 
 
+def _delete_version_files(db: Session, version: AssetVersion, cos: Optional[dict]) -> None:
+    """删除版本的实体文件。
+
+    上传时会按文件哈希去重，多个版本可能共用同一个文件，这种情况下只删缩略图。
+    """
+    shared = (
+        db.query(AssetVersion)
+        .filter(
+            AssetVersion.file_path == version.file_path,
+            AssetVersion.id != version.id,
+        )
+        .first()
+        is not None
+    )
+    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
+    storage.delete_file(version.thumb_small, version.thumb_small_storage or "local", cos)
+    if not shared:
+        storage.delete_file(version.file_path, version.storage or "local", cos)
+
+
+@router.post("/versions/{version_id}/source")
+def replace_version_source(
+    version_id: int,
+    file: UploadFile = File(...),
+    changelog: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """换源：把某个已有版本的文件替换掉。
+
+    版本号、下载次数、评论都保持不变；只换文件本身，并重新派生该版本的 42×42 小图。
+    """
+    version = db.get(AssetVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    asset = version.asset
+    ensure_project_access(db, asset.project_id, user, write=True)
+
+    cos = storage_config.cos_params(db)
+    staged = storage.stage_upload(file)
+    # 图片文件要用它本身派生小图，临时文件稍后会被移走，先读出来
+    file_bytes = (
+        staged["tmp_path"].read_bytes()
+        if staged["file_format"] in storage.DERIVABLE_FORMATS
+        else None
+    )
+
+    # 先清掉旧文件与旧缩略图，再落到同一个版本号的目录下
+    _delete_version_files(db, version, cos)
+    placed = storage.place_upload(
+        staged["tmp_path"],
+        asset.project_id,
+        asset.id,
+        version.version,
+        staged["file_name"],
+        cos,
+    )
+    version.storage = placed["storage"]
+    version.file_path = placed["file_path"]
+    version.file_name = staged["file_name"]
+    version.file_size = staged["file_size"]
+    version.file_format = staged["file_format"]
+    version.file_hash = staged["file_hash"]
+    if changelog is not None:
+        version.changelog = changelog
+
+    small = storage.store_version_small(
+        asset.id, version.version, storage.derive_small(file_bytes), cos
+    )
+    version.thumb_small = small["path"]
+    version.thumb_small_storage = small["storage"]
+
+    db.commit()
+    db.refresh(version)
+    return version_to_dict(version)
+
+
 @router.delete("/versions/{version_id}")
 def delete_version(
     version_id: int,
@@ -316,10 +393,7 @@ def delete_version(
     version = db.get(AssetVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="版本不存在")
-    if not can_edit_asset(version.asset, user):
-        raise HTTPException(
-            status_code=403, detail="仅资产创建者或高级管理员可删除版本"
-        )
+    ensure_project_access(db, version.asset.project_id, user, write=True)
 
     if version.is_latest:
         raise HTTPException(status_code=400, detail="不能删除最新版本，请先上传新版本")
@@ -328,11 +402,7 @@ def delete_version(
     db.query(Comment).filter(Comment.version_id == version_id).update(
         {Comment.version_id: None}
     )
-    cos = storage_config.cos_params(db)
-    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
-    storage.delete_file(version.thumb_small, version.thumb_small_storage or "local", cos)
-    if version.storage == "cos":
-        storage.delete_file(version.file_path, "cos", cos)
+    _delete_version_files(db, version, storage_config.cos_params(db))
 
     db.delete(version)
     db.commit()

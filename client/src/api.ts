@@ -162,6 +162,9 @@ export const api = {
     client.get<Version[]>(`/assets/${assetId}/versions`).then((r) => r.data),
   uploadVersion: (assetId: number, form: FormData) =>
     client.post<Version>(`/assets/${assetId}/versions`, form).then((r) => r.data),
+  /** 换源：替换某个已有版本的文件，版本号与下载数不变 */
+  replaceVersionSource: (versionId: number, form: FormData) =>
+    client.post<Version>(`/versions/${versionId}/source`, form).then((r) => r.data),
   deleteVersion: (versionId: number) =>
     client.delete(`/versions/${versionId}`).then((r) => r.data),
   downloadStats: (assetId: number) =>

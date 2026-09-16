@@ -18,7 +18,7 @@ import {
 import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
-import type { Asset, Category } from '../types'
+import type { Asset, Category, Project } from '../types'
 import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
@@ -29,6 +29,7 @@ export default function AssetEdit() {
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -47,8 +48,12 @@ export default function AssetEdit() {
         tags: a.tags?.join(',') ?? '',
         category_id: a.category_id ?? undefined,
       })
-      const cats = await api.listCategories(a.project_id)
+      const [cats, proj] = await Promise.all([
+        api.listCategories(a.project_id),
+        api.getProject(a.project_id),
+      ])
       setCategories(cats)
+      setProject(proj)
       setError(null)
     } catch (e: any) {
       setError(e.response?.data?.detail || '资产不存在')
@@ -70,8 +75,15 @@ export default function AssetEdit() {
   }
   if (error || !asset) return <Result status="404" title={error || '资产不存在'} />
 
-  // 编辑资产：仅上传者本人或高级管理员
-  const canEdit = asset.created_by === me?.id || isSuperAdmin(me?.role)
+  // 项目内的资产由项目成员共同维护；删除整个资产仍然只有创建者或高级管理员能动
+  const canEdit =
+    !!me &&
+    (asset.created_by === me.id ||
+      isSuperAdmin(me.role) ||
+      project?.owner_id === me.id ||
+      (project?.members || []).some((m) => m.user?.id === me.id))
+  // 删除整个资产仍然是创建者/高级管理员专属（版本级的删除在资产页）
+  const canDelete = asset.created_by === me?.id || isSuperAdmin(me?.role)
 
   const onSave = async (values: any) => {
     const fd = new FormData()
@@ -199,14 +211,16 @@ export default function AssetEdit() {
                   <Typography.Text type="secondary">
                     删除后该资产的所有版本、文件、评论与点赞都会一并移除，且无法恢复。
                   </Typography.Text>
-                  {canEdit ? (
+                  {canDelete ? (
                     <Popconfirm title="确定删除该资产？此操作不可恢复" onConfirm={onDelete}>
                       <Button danger icon={<DeleteOutlined />}>
                         删除资产
                       </Button>
                     </Popconfirm>
                   ) : (
-                    <Typography.Text type="secondary">只有资产上传者或管理员可以删除</Typography.Text>
+                    <Typography.Text type="secondary">
+                      整个资产只有上传者本人或高级管理员可以删除；版本级别的删除在资产页的版本历史里
+                    </Typography.Text>
                   )}
                 </Space>
               </Card>
