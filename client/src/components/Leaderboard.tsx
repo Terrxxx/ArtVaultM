@@ -99,12 +99,6 @@ export default function Leaderboard({
           })}
         </div>
       )}
-
-      {shown.length > 0 && (
-        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
-          共 {shown.length} 人上榜 · 点击进入主页
-        </Typography.Text>
-      )}
     </div>
   )
 }

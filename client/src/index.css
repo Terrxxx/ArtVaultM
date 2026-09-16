@@ -110,6 +110,11 @@ body.av-wide .av-content {
   flex: 0 0 240px;
 }
 
+/* 侧栏不做卡片底，内容直接浮在页面底色上；热力图随之去掉自带的深色底 */
+.av-rail-plain {
+  --av-heat-canvas: transparent;
+}
+
 /* 屏幕不够宽时中间内容先占满一行，两栏并排落到下面 */
 @media (max-width: 1120px) {
   .av-project-main {

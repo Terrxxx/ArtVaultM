@@ -345,17 +345,18 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         <FileOutlined style={{ fontSize: 28 }} />
       </div>
       <div className="av-project-layout">
-        {/* 左栏：贡献排行 */}
-        <div className="av-rail-left">
-          <Card title="贡献排行">
-            <Leaderboard
-              items={rankItems}
-              days={rankDays}
-              onDaysChange={setRankDays}
-              loading={rankLoading}
-              emptyText="这段时间还没有贡献"
-            />
-          </Card>
+        {/* 左栏：贡献排行（不做卡片底，直接浮在页面底色上） */}
+        <div className="av-rail-left av-rail-plain">
+          <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+            贡献排行
+          </Typography.Title>
+          <Leaderboard
+            items={rankItems}
+            days={rankDays}
+            onDaysChange={setRankDays}
+            loading={rankLoading}
+            emptyText="这段时间还没有贡献"
+          />
         </div>
 
         {/* 中间：原来的项目内容 */}
@@ -611,17 +612,18 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         )}
         </Space>
 
-        {/* 右栏：竖向热力图 */}
-        <div className="av-rail-right">
-          <Card title="更新热力图">
-            <Heatmap
-              vertical
-              days={activity?.days || []}
-              years={activity?.years || []}
-              value={year}
-              onChange={setYear}
-            />
-          </Card>
+        {/* 右栏：竖向热力图（同样不做卡片底） */}
+        <div className="av-rail-right av-rail-plain">
+          <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+            更新热力图
+          </Typography.Title>
+          <Heatmap
+            vertical
+            days={activity?.days || []}
+            years={activity?.years || []}
+            value={year}
+            onChange={setYear}
+          />
         </div>
       </div>
 
