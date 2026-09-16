@@ -63,9 +63,8 @@ function UserManager({ me }: { me: User | null }) {
   const [editForm] = Form.useForm()
   const superAdmin = isSuperAdmin(me?.role)
 
-  /** 管理员只能管普通成员；高级管理员可管所有人（且不能改自己）；已删除的不再可管 */
-  const manageable = (u: User) =>
-    !u.deleted_at && (superAdmin ? u.id !== me?.id : u.role === 'member')
+  /** 管理员只能管普通成员；高级管理员可管所有人（且不能改自己） */
+  const manageable = (u: User) => (superAdmin ? u.id !== me?.id : u.role === 'member')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -153,25 +152,14 @@ function UserManager({ me }: { me: User | null }) {
       title: '角色',
       dataIndex: 'role',
       width: 130,
-      render: (role: string, u: User) => (
-        <Space size={6}>
-          <RoleTag role={role} />
-          {u.id === me?.id && <Typography.Text type="secondary">(我)</Typography.Text>}
-        </Space>
-      ),
+      render: (role: string) => <RoleTag role={role} />,
     },
     {
       title: '状态',
       dataIndex: 'status',
       width: 110,
       render: (_: string, u: User) =>
-        u.deleted_at ? (
-          <Tag>已删除</Tag>
-        ) : u.status === 'active' ? (
-          <Tag color="green">正常</Tag>
-        ) : (
-          <Tag color="red">已禁用</Tag>
-        ),
+        u.status === 'active' ? <Tag color="green">正常</Tag> : <Tag color="red">已禁用</Tag>,
     },
     {
       title: '创建时间',
@@ -183,13 +171,6 @@ function UserManager({ me }: { me: User | null }) {
       title: '操作',
       key: 'action',
       render: (_: unknown, u: User) => {
-        if (u.deleted_at) {
-          return (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              已删除
-            </Typography.Text>
-          )
-        }
         if (!manageable(u)) {
           return (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

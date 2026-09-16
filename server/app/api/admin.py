@@ -75,7 +75,11 @@ def create_user(
 def list_users(
     db: Session = Depends(get_db), admin: User = Depends(get_current_admin)
 ):
-    return [user_out(u) for u in db.query(User).order_by(User.id).all()]
+    """用户列表：软删除的账号只在库里留存，不再显示在后台。"""
+    return [
+        user_out(u)
+        for u in db.query(User).filter(User.deleted_at.is_(None)).order_by(User.id).all()
+    ]
 
 
 @router.patch("/users/{user_id}")

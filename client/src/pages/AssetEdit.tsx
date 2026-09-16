@@ -129,11 +129,7 @@ export default function AssetEdit() {
                   <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
                     <Input />
                   </Form.Item>
-                  <Form.Item
-                    name="category_id"
-                    label="资产类型"
-                    extra="只是给资产打个声明，和它放在哪个文件夹没有关系；可以留空"
-                  >
+                  <Form.Item name="category_id" label="资产类型">
                     <Select
                       allowClear
                       placeholder="未分类"
