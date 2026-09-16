@@ -47,11 +47,11 @@ export default function UserProfilePage() {
     }
   }, [key, year])
 
-  // 更新日志：选中某天看当天，否则看最近若干条
+  // 更新日志：选中某天看当天，否则看最近若干条（最多 10 条）
   const loadUpdates = useCallback(async () => {
     setLoadingUpdates(true)
     try {
-      const r = await api.getUserUpdates(key, selectedDate, 20)
+      const r = await api.getUserUpdates(key, selectedDate, 10)
       setUpdates(r.items)
     } catch {
       setUpdates([])
@@ -63,6 +63,12 @@ export default function UserProfilePage() {
   useEffect(() => {
     loadUpdates()
   }, [loadUpdates])
+
+  // 右栏要放热力图，让外层容器撑满屏幕（否则内容被 1200 卡住、没有侧边空间）
+  useEffect(() => {
+    document.body.classList.add('av-wide')
+    return () => document.body.classList.remove('av-wide')
+  }, [])
 
   if (loading) {
     return (
@@ -78,33 +84,93 @@ export default function UserProfilePage() {
   const { user, stats, projects } = profile
 
   return (
-    <div>
-      <Card style={{ marginBottom: 20 }}>
-        <Space size={24} align="center" wrap>
-          <Avatar size={72} icon={<UserOutlined />} src={user.avatar_url || undefined} />
-          <div>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {user.nickname || user.username}
-            </Typography.Title>
-            <Space size={12}>
-              <Typography.Text type="secondary">@{user.username}</Typography.Text>
-              {user.github_url && (
-                <a href={user.github_url} target="_blank" rel="noreferrer">
-                  <GithubOutlined /> GitHub
-                </a>
-              )}
+    <div className="av-center-layout">
+      {/* 主内容 */}
+      <div className="av-center-main">
+        <Space direction="vertical" size={20} style={{ width: '100%' }}>
+          <Card>
+            <Space size={24} align="center" wrap>
+              <Avatar size={72} icon={<UserOutlined />} src={user.avatar_url || undefined} />
+              <div>
+                <Typography.Title level={4} style={{ margin: 0 }}>
+                  {user.nickname || user.username}
+                </Typography.Title>
+                <Space size={12}>
+                  <Typography.Text type="secondary">@{user.username}</Typography.Text>
+                  {user.github_url && (
+                    <a href={user.github_url} target="_blank" rel="noreferrer">
+                      <GithubOutlined /> GitHub
+                    </a>
+                  )}
+                </Space>
+              </div>
+              <Space size={40} style={{ marginLeft: 'auto' }}>
+                <Statistic title="上传资产" value={stats.asset_count} />
+                <Statistic title="涉及项目" value={stats.project_count} />
+                <Statistic title="版本总数" value={stats.version_count} />
+              </Space>
             </Space>
-          </div>
-          <Space size={40} style={{ marginLeft: 'auto' }}>
-            <Statistic title="上传资产" value={stats.asset_count} />
-            <Statistic title="涉及项目" value={stats.project_count} />
-            <Statistic title="版本总数" value={stats.version_count} />
-          </Space>
-        </Space>
-      </Card>
+          </Card>
 
-      <Card title="更新热力图" style={{ marginBottom: 20 }}>
+          <Card title="更新日志">
+            <UpdateLog
+              items={updates}
+              date={selectedDate}
+              onClearDate={() => setSelectedDate(null)}
+              loading={loadingUpdates}
+              showProject
+            />
+          </Card>
+
+          {projects.length === 0 ? (
+            <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 40 }} />
+          ) : (
+            projects.map((p, idx) =>
+              p.restricted ? (
+                // 私有项目且访问者无权查看：只提示，不暴露项目名与资产
+                <Card key={`restricted-${idx}`} size="small">
+                  <Space size={8}>
+                    <Tag>私有</Tag>
+                    <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
+                  </Space>
+                </Card>
+              ) : (
+                <Card
+                  key={p.project_id ?? idx}
+                  title={
+                    <Space size={10}>
+                      {/* /projects/:id 会自动重定向到规范地址 */}
+                      <Link to={`/projects/${p.project_id}`}>{p.project_name}</Link>
+                      <Tag>{p.assets.length} 个资产</Tag>
+                      {p.github_repo_url && (
+                        <a href={p.github_repo_url} target="_blank" rel="noreferrer">
+                          <GithubOutlined />
+                        </a>
+                      )}
+                    </Space>
+                  }
+                >
+                  <Row gutter={[16, 16]}>
+                    {p.assets.map((a) => (
+                      <Col xs={24} sm={12} lg={6} key={a.id}>
+                        <AssetCard asset={a} />
+                      </Col>
+                    ))}
+                  </Row>
+                </Card>
+              ),
+            )
+          )}
+        </Space>
+      </div>
+
+      {/* 右栏：竖向热力图，和项目页一致 */}
+      <div className="av-rail-right av-rail-plain">
+        <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+          更新热力图
+        </Typography.Title>
         <Heatmap
+          vertical
           days={activity?.days || []}
           years={activity?.years || []}
           value={year}
@@ -116,58 +182,7 @@ export default function UserProfilePage() {
           onSelectDay={(d) => setSelectedDate((prev) => (prev === d ? null : d))}
           loading={loading}
         />
-        <div style={{ marginTop: 20, borderTop: '1px solid var(--av-border)', paddingTop: 16 }}>
-          <UpdateLog
-            items={updates}
-            date={selectedDate}
-            onClearDate={() => setSelectedDate(null)}
-            loading={loadingUpdates}
-            showProject
-          />
-        </div>
-      </Card>
-
-      {projects.length === 0 ? (
-        <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 40 }} />
-      ) : (
-        <Space direction="vertical" size={20} style={{ width: '100%' }}>
-          {projects.map((p, idx) =>
-            p.restricted ? (
-              // 私有项目且访问者无权查看：只提示，不暴露项目名与资产
-              <Card key={`restricted-${idx}`} size="small">
-                <Space size={8}>
-                  <Tag>私有</Tag>
-                  <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
-                </Space>
-              </Card>
-            ) : (
-              <Card
-                key={p.project_id ?? idx}
-                title={
-                  <Space size={10}>
-                    {/* /projects/:id 会自动重定向到规范地址 */}
-                    <Link to={`/projects/${p.project_id}`}>{p.project_name}</Link>
-                    <Tag>{p.assets.length} 个资产</Tag>
-                    {p.github_repo_url && (
-                      <a href={p.github_repo_url} target="_blank" rel="noreferrer">
-                        <GithubOutlined />
-                      </a>
-                    )}
-                  </Space>
-                }
-              >
-                <Row gutter={[16, 16]}>
-                  {p.assets.map((a) => (
-                    <Col xs={24} sm={12} lg={6} key={a.id}>
-                      <AssetCard asset={a} />
-                    </Col>
-                  ))}
-                </Row>
-              </Card>
-            ),
-          )}
-        </Space>
-      )}
+      </div>
     </div>
   )
 }

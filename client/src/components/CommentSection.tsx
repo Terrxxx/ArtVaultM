@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Avatar, Button, Empty, Input, List, Popconfirm, Select, Space, Tag, Typography, message } from 'antd'
-import { UserOutlined } from '@ant-design/icons'
-import { api } from '../api'
+import { Avatar, Button, Empty, Input, List, Popconfirm, Popover, Select, Space, Tag, Typography, message } from 'antd'
+import { SmileOutlined, UserOutlined } from '@ant-design/icons'
+import { Link } from 'react-router-dom'
+import { api, userPath } from '../api'
 import type { Comment, UserBrief, Version } from '../types'
 import { useAuthStore } from '../store'
 
@@ -9,6 +10,52 @@ import { useAuthStore } from '../store'
 const ALL = 0
 // 正文里的 @v1 表示这条评论指向 v1，可以同时写多个
 const VERSION_REF = /^@v\d+$/
+
+// 表情栏：够日常用就行，不引第三方 emoji 库
+const EMOJIS = [
+  '👍', '👎', '👌', '🙏', '👏', '💪', '🤔', '👀',
+  '😀', '😄', '😁', '😅', '😂', '🙂', '😉', '😍',
+  '😐', '😴', '😭', '😡', '🎉', '🔥', '✨', '💡',
+  '✅', '❌', '⚠️', '❓', '❗', '⭐', '❤️', '🚀',
+  '🐛', '🎨', '📦', '🕹️', '🎬', '🎵', '📝', '📌',
+]
+
+/** 表情栏：点一下把表情插到正文末尾 */
+function EmojiBar({ onPick }: { onPick: (emoji: string) => void }) {
+  // 收起气泡靠换 key 重挂载，比受控 open 稳
+  const [round, setRound] = useState(0)
+  return (
+    <Popover
+      key={round}
+      trigger="click"
+      placement="topLeft"
+      content={
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 2, width: 264 }}>
+          {EMOJIS.map((e) => (
+            <div
+              key={e}
+              onClick={() => {
+                onPick(e)
+                setRound((n) => n + 1)
+              }}
+              style={{
+                cursor: 'pointer',
+                textAlign: 'center',
+                fontSize: 18,
+                lineHeight: '26px',
+                borderRadius: 4,
+              }}
+            >
+              {e}
+            </div>
+          ))}
+        </div>
+      }
+    >
+      <Button icon={<SmileOutlined />} title="表情" />
+    </Popover>
+  )
+}
 
 /** 把正文里的 @v版本号 与 @提及 高亮显示 */
 function renderContent(text: string) {
@@ -216,10 +263,14 @@ export default function CommentSection({ assetId, versions }: Props) {
     return (
       <div key={c.id} style={{ marginBottom: 14 }}>
         <Space align="start" style={{ width: '100%' }}>
-          <Avatar size="small" icon={<UserOutlined />} src={c.user.avatar_url || undefined} />
+          <Link to={userPath(c.user)} title={c.user.nickname || c.user.username}>
+            <Avatar size="small" icon={<UserOutlined />} src={c.user.avatar_url || undefined} />
+          </Link>
           <div style={{ flex: 1 }}>
             <Space size={8} wrap>
-              <Typography.Text strong>{c.user.nickname || c.user.username}</Typography.Text>
+              <Link to={userPath(c.user)}>
+                <Typography.Text strong>{c.user.nickname || c.user.username}</Typography.Text>
+              </Link>
               {c.versions.map((n) => (
                 <Tag key={n} color="blue">
                   v{n}
@@ -248,8 +299,12 @@ export default function CommentSection({ assetId, versions }: Props) {
                 {replies.map((r) => (
                   <div key={r.id} style={{ marginBottom: 8 }}>
                     <Space size={8} wrap>
-                      <Avatar size="small" icon={<UserOutlined />} src={r.user.avatar_url || undefined} />
-                      <Typography.Text strong>{r.user.nickname || r.user.username}</Typography.Text>
+                      <Link to={userPath(r.user)} title={r.user.nickname || r.user.username}>
+                        <Avatar size="small" icon={<UserOutlined />} src={r.user.avatar_url || undefined} />
+                      </Link>
+                      <Link to={userPath(r.user)}>
+                        <Typography.Text strong>{r.user.nickname || r.user.username}</Typography.Text>
+                      </Link>
                       {r.versions.map((n) => (
                         <Tag key={n} color="blue">
                           v{n}
@@ -306,11 +361,14 @@ export default function CommentSection({ assetId, versions }: Props) {
           placeholder="写下你的评论…  用 @v1 指向具体版本"
           versions={versions}
         />
-        <Space style={{ marginTop: 8 }} wrap>
+        {/* 表情栏靠左，发布按钮靠右 */}
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <EmojiBar onPick={(e) => setContent((v) => v + e)} />
+          <div style={{ flex: 1 }} />
           <Button type="primary" loading={submitting} onClick={() => submit()}>
-            发表评论
+            发布
           </Button>
-        </Space>
+        </div>
       </div>
 
       {roots.length === 0 ? (

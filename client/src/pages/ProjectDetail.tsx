@@ -18,7 +18,6 @@ import {
   Typography,
 } from 'antd'
 import {
-  ArrowLeftOutlined,
   BellOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -344,7 +343,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       >
         <FileOutlined style={{ fontSize: 28 }} />
       </div>
-      <div className="av-project-layout">
+      <div className="av-side-layout">
         {/* 左栏：贡献排行（不做卡片底，直接浮在页面底色上） */}
         <div className="av-rail-left av-rail-plain">
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
@@ -360,11 +359,8 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         </div>
 
         {/* 中间：原来的项目内容 */}
-        <Space direction="vertical" size={16} className="av-project-main">
+        <Space direction="vertical" size={16} className="av-side-main">
         <Space align="center" size={12} wrap>
-          <Link to="/">
-            <ArrowLeftOutlined /> 返回
-          </Link>
           <Typography.Title level={4} style={{ margin: 0 }}>
             {project.name}
           </Typography.Title>

@@ -19,6 +19,7 @@ import {
   Upload,
 } from 'antd'
 import {
+  ArrowLeftOutlined,
   BellOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -33,7 +34,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, downloadVersion, formatSize, userPath } from '../api'
+import { api, downloadVersion, formatSize, projectPath, userPath } from '../api'
 import type { Asset, Project, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
@@ -43,6 +44,9 @@ import { useAuthStore } from '../store'
 
 // 版本历史默认展示的条数
 const VERSION_PREVIEW = 4
+// 封面固定 3:2 横图：图片按这个尺寸裁切填满，不随栏宽变大变小
+const COVER_WIDTH = 540
+const COVER_HEIGHT = 360
 
 export default function AssetDetail() {
   const { id } = useParams()
@@ -86,6 +90,12 @@ export default function AssetDetail() {
   useEffect(() => {
     load()
   }, [load])
+
+  // 主体要保持在原来的居中位置，评论栏才能塞进左边的空白；所以让外层容器撑满屏幕
+  useEffect(() => {
+    document.body.classList.add('av-wide')
+    return () => document.body.classList.remove('av-wide')
+  }, [])
 
   if (loading) {
     return (
@@ -177,9 +187,16 @@ export default function AssetDetail() {
     }
   }
 
+  // 返回时落回该资产所在的文件夹，而不是项目根目录
+  const projectHref = `${projectPath({
+    id: asset.project_id,
+    slug: asset.project_slug,
+    owner: asset.project_owner,
+  })}${asset.folder_id ? `?folder=${asset.folder_id}` : ''}`
+
   return (
     <div>
-      <div className="av-asset-layout">
+      <div className="av-center-layout">
         {/* 左栏：评论 */}
         <div className="av-rail-comments av-rail-plain">
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
@@ -189,17 +206,35 @@ export default function AssetDetail() {
         </div>
 
         {/* 主内容 */}
-        <div className="av-asset-main">
+        <div className="av-center-main">
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => navigate(projectHref)}
+            style={{ marginBottom: 16 }}
+          >
+            返回
+          </Button>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Row gutter={16}>
-            <Col xs={24} md={10}>
+            {/* 列宽自适应封面，封面内尺寸固定，保证正好 3:2 */}
+            <Col flex="0 0 auto">
               <Card styles={{ body: { padding: 0 } }}>
                 {coverSrc ? (
-                  <img src={coverSrc} alt={asset.name} style={{ width: '100%', display: 'block' }} />
+                  <img
+                    src={coverSrc}
+                    alt={asset.name}
+                    style={{
+                      width: COVER_WIDTH,
+                      height: COVER_HEIGHT,
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
                 ) : (
                   <div
                     style={{
-                      height: 260,
+                      width: COVER_WIDTH,
+                      height: COVER_HEIGHT,
                       background: 'var(--av-surface)',
                       display: 'flex',
                       flexDirection: 'column',
@@ -217,7 +252,8 @@ export default function AssetDetail() {
                 )}
               </Card>
             </Col>
-            <Col xs={24} md={14}>
+            {/* flex 基数为 0，信息栏才不会因为内容太宽而换到封面下面 */}
+            <Col style={{ flex: '1 1 0', minWidth: 0 }}>
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 <Space align="center" size={12} wrap>
                   <Typography.Title level={3} style={{ margin: 0 }}>

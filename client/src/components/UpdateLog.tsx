@@ -1,7 +1,6 @@
-import { Avatar, Button, Empty, List, Space, Tag, Typography } from 'antd'
-import { UserOutlined } from '@ant-design/icons'
+import { Button, Empty, List, Space, Tag, Typography } from 'antd'
+import { ArrowRightOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { userPath } from '../api'
 import type { UpdateItem } from '../types'
 
 function fmtTime(t?: string | null): string {
@@ -10,6 +9,11 @@ function fmtTime(t?: string | null): string {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(
     d.getMinutes(),
   ).padStart(2, '0')}`
+}
+
+/** 行为说明：v1 是这条资产第一次上传，之后都是新版本 */
+function actionOf(it: UpdateItem): string {
+  return it.version === 1 ? '新建资产' : '更新资产'
 }
 
 interface Props {
@@ -29,25 +33,26 @@ export default function UpdateLog({
   loading,
   showProject = false,
 }: Props) {
-  const title = date ? `${date} 的更新（${items.length}）` : `更新日志（最近 ${items.length} 条）`
+  // 只有「只看某一天」时才需要这行（日期 + 查看全部）；平时的标题由外层 Card 提供，避免重复
+  const title = date ? `${date} 的更新（${items.length}）` : null
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 8,
-        }}
-      >
-        <Typography.Text strong>{title}</Typography.Text>
-        {date && (
+      {title && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+          }}
+        >
+          <Typography.Text strong>{title}</Typography.Text>
           <Button type="link" size="small" onClick={onClearDate}>
             查看全部
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <List
         loading={loading}
@@ -65,65 +70,43 @@ export default function UpdateLog({
             // 私有项目：不暴露资产名与项目名
             return (
               <List.Item style={{ padding: '10px 0' }}>
-                <List.Item.Meta
-                  avatar={
-                    <Avatar
-                      size="small"
-                      icon={<UserOutlined />}
-                      src={it.uploader?.avatar_url || undefined}
-                    />
-                  }
-                  title={
-                    <Space size={8}>
-                      <Tag>私有</Tag>
-                      <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
-                    </Space>
-                  }
-                  description={
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {fmtTime(it.created_at)}
-                    </Typography.Text>
-                  }
-                />
+                <Space size={8} wrap>
+                  <Tag>私有</Tag>
+                  <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {fmtTime(it.created_at)}
+                  </Typography.Text>
+                </Space>
               </List.Item>
             )
           }
 
           return (
             <List.Item style={{ padding: '10px 0' }}>
-              <List.Item.Meta
-                avatar={
-                  <Link to={userPath(it.uploader)}>
-                    <Avatar size="small" icon={<UserOutlined />} src={it.uploader?.avatar_url || undefined} />
-                  </Link>
-                }
-                title={
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%' }}>
+                {/* 左边：项目名 + 资产名、说明、时间 */}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <Space size={8} wrap>
-                    <Typography.Text strong>{it.asset_name || '资产'}</Typography.Text>
-                    <Tag color="green">v{it.version}</Tag>
                     {showProject && it.project_name && (
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        @ {it.project_name}
+                      <Typography.Text strong style={{ color: 'var(--av-primary)' }}>
+                        {it.project_name}
                       </Typography.Text>
                     )}
+                    <Tag>{actionOf(it)}</Tag>
+                    <Typography.Text strong>{it.asset_name || '资产'}</Typography.Text>
                   </Space>
-                }
-                description={
-                  <Space direction="vertical" size={2}>
-                    {it.changelog && <Typography.Text>{it.changelog}</Typography.Text>}
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {it.uploader ? (
-                        <Link to={userPath(it.uploader)}>
-                          {it.uploader.nickname || it.uploader.username}
-                        </Link>
-                      ) : (
-                        '未知'
-                      )}{' '}
-                      · {fmtTime(it.created_at)}
-                    </Typography.Text>
-                  </Space>
-                }
-              />
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                    {fmtTime(it.created_at)}
+                  </Typography.Text>
+                </div>
+                {/* 右边：版本号 + 跳转按钮 */}
+                <Space size={8} align="center">
+                  <Tag color="green">v{it.version}</Tag>
+                  <Link to={`/assets/${it.asset_id}`} title="查看资产">
+                    <Button size="small" icon={<ArrowRightOutlined />} />
+                  </Link>
+                </Space>
+              </div>
             </List.Item>
           )
         }}
