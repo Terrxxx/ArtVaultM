@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Avatar, Badge, Dropdown, Layout as AntLayout, Space } from 'antd'
-import { BellOutlined, DatabaseOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons'
+import { BellOutlined, DatabaseOutlined, GithubOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { api, userPath } from '../api'
 import { isAdminLike } from '../types'
@@ -67,6 +67,15 @@ export default function Layout() {
             <DatabaseOutlined /> 艺库{' '}
             <span style={{ fontSize: 13, fontWeight: 400, color: '#999' }}>ArtVault</span>
           </Link>
+          <a
+            href="https://github.com/Terrxxx/ArtVaultM"
+            target="_blank"
+            rel="noreferrer"
+            title="GitHub 仓库"
+            style={{ fontSize: 20, color: '#555', lineHeight: 1 }}
+          >
+            <GithubOutlined />
+          </a>
           <nav style={{ display: 'flex', gap: 20, fontSize: 15 }}>
             <Link to="/">项目</Link>
             {isAdmin && <Link to="/console">管理后台</Link>}
