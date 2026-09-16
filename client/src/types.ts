@@ -43,6 +43,10 @@ export interface Category {
   sort_order: number
   is_system: boolean
   asset_count: number
+  /** 整个子树（含子孙文件夹）里的资产总数 */
+  subtree_asset_count: number
+  /** 子孙文件夹总数，不含自己 */
+  subtree_folder_count: number
 }
 
 export interface Asset {
@@ -133,13 +137,6 @@ export interface Notification {
   comment_id?: number | null
   actor?: UserBrief | null
   created_at?: string
-}
-
-export interface AssetRelation {
-  id: number
-  relation_type: string
-  direction: 'in' | 'out'
-  asset: Asset
 }
 
 export interface DownloadStats {

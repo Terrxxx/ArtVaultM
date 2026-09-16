@@ -140,6 +140,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     (project.members || []).some((m) => m.user?.id === me?.id)
   // 移动资产：项目所有者/高级管理员，或资产创建者本人
   const canMoveAsset = (a: Asset) => canEdit || a.created_by === me?.id
+  // 整理文件夹（新建/重命名/移动/删空文件夹）：项目成员即可
+  const canManageFolder = isMember
+  // 删除会连资产一起删的文件夹：仅项目创建者或高级管理员
+  const canDeleteFolder = (c: Category) => canEdit || !c.subtree_asset_count
+  // 删除时需要输入名称二次确认：整个子树里有资产或有子文件夹
+  const needsConfirm = (c: Category) => c.subtree_asset_count > 0 || c.subtree_folder_count > 0
 
   // 当前文件夹下的子文件夹
   const childFolders = categories.filter((c) => (c.parent_id || 0) === folderId)
@@ -216,6 +222,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
+  // 删除确认文案：整个子树会删掉多少东西
+  const deleteSummary = (c: Category) => {
+    const parts: string[] = []
+    if (c.subtree_folder_count) parts.push(`${c.subtree_folder_count} 个子文件夹`)
+    if (c.subtree_asset_count) parts.push(`${c.subtree_asset_count} 个资产`)
+    return parts.join('、')
+  }
+
   const removeFolder = async (category: Category) => {
     try {
       await api.deleteCategory(category.id)
@@ -228,9 +242,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
-  // 有资产的文件夹要输入名称二次确认（资产会被一并删除），空的直接删
+  // 子树里有资产或有子文件夹的，要输入名称二次确认（会一并删掉），空的直接删
   const requestDeleteFolder = (category: Category) => {
-    if (!category.asset_count) {
+    if (!needsConfirm(category)) {
       removeFolder(category)
       return
     }
@@ -384,7 +398,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               需要项目所有者邀请并同意后，才能上传资产
             </Typography.Text>
           )}
-          {canEdit && (
+          {canManageFolder && (
             <Button
               icon={<FolderAddOutlined />}
               onClick={() => {
@@ -428,7 +442,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         ) : (
           <Row gutter={[16, 16]}>
             {childFolders.map((c) => {
-              const subCount = categories.filter((x) => (x.parent_id || 0) === c.id).length
               const hovering = overFolder === c.id
               return (
                 <Col xs={12} sm={8} lg={6} key={`folder-${c.id}`}>
@@ -441,7 +454,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                   >
                     <div
                       {...dropHandlers(c.id)}
-                      draggable={canEdit}
+                      draggable={canManageFolder}
                       onDragStart={(e) => startDrag(e, `folder:${c.id}`, `folder:${c.id}`)}
                       onDragEnd={endDrag}
                       onClick={() => setFolderId(c.id)}
@@ -491,11 +504,13 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                             {c.name}
                           </Typography.Text>
                           <Space size={4} wrap>
-                            <Tag color="blue">{c.asset_count} 个资产</Tag>
-                            {subCount > 0 && <Tag color="purple">{subCount} 个子文件夹</Tag>}
+                            <Tag color="blue">{c.subtree_asset_count} 个资产</Tag>
+                            {c.subtree_folder_count > 0 && (
+                              <Tag color="purple">{c.subtree_folder_count} 个子文件夹</Tag>
+                            )}
                           </Space>
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            {canEdit ? '点击进入 · 拖动可移入其他文件夹' : '点击进入'}
+                            {canManageFolder ? '点击进入 · 拖动可移入其他文件夹' : '点击进入'}
                           </Typography.Text>
                           <Space size={4}>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -505,7 +520,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                         </Space>
                       </Card>
                     </div>
-                    {canEdit && (
+                    {canManageFolder && (
                       <Dropdown
                         trigger={['click']}
                         menu={{
@@ -518,8 +533,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                             {
                               key: 'delete',
                               icon: <DeleteOutlined />,
-                              label: '删除文件夹',
+                              label: canDeleteFolder(c)
+                                ? '删除文件夹'
+                                : '删除文件夹（内有资产，仅项目创建者或高级管理员可删）',
                               danger: true,
+                              disabled: !canDeleteFolder(c),
                             },
                           ],
                           onClick: ({ key, domEvent }) => {
@@ -642,7 +660,8 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       >
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
           <Typography.Text type="danger">
-            该文件夹内的 {deleteTarget?.asset_count} 个资产会被一并永久删除，不可恢复。
+            删除后，该文件夹连同其中的 {deleteTarget ? deleteSummary(deleteTarget) : ''}
+            都会被一并永久删除，不可恢复。
           </Typography.Text>
           <Typography.Text type="secondary">
             请输入文件夹名称「{deleteTarget?.name}」以确认删除：

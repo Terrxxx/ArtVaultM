@@ -4,7 +4,6 @@ import type {
   ActivityResponse,
   AdminProject,
   Asset,
-  AssetRelation,
   Category,
   Comment,
   DownloadStats,
@@ -170,16 +169,6 @@ export const api = {
   // ---------- 点赞 ----------
   toggleLike: (assetId: number) =>
     client.post<{ liked: boolean; like_count: number }>(`/assets/${assetId}/like`).then((r) => r.data),
-
-  // ---------- 资产关联 ----------
-  listRelations: (assetId: number) =>
-    client.get<AssetRelation[]>(`/assets/${assetId}/relations`).then((r) => r.data),
-  addRelation: (assetId: number, toAssetId: number, relationType = 'related') =>
-    client
-      .post(`/assets/${assetId}/relations`, { to_asset_id: toAssetId, relation_type: relationType })
-      .then((r) => r.data),
-  deleteRelation: (relationId: number) =>
-    client.delete(`/relations/${relationId}`).then((r) => r.data),
 
   // ---------- 评论 ----------
   listComments: (assetId: number, versionId?: number) =>

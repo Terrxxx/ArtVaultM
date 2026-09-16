@@ -203,21 +203,6 @@ class DownloadLog(Base):
     user = relationship("User")
 
 
-class AssetRelation(Base):
-    """资产之间的关联，如模型关联到动画。"""
-
-    __tablename__ = "asset_relations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    from_asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
-    to_asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
-    relation_type = Column(String, default="related")  # related / uses / used_by
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    from_asset = relationship("Asset", foreign_keys=[from_asset_id])
-    to_asset = relationship("Asset", foreign_keys=[to_asset_id])
-
-
 class Subscription(Base):
     """订阅：关注项目或某个资产的更新。"""
 

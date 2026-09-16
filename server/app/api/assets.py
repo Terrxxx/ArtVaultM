@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Asset, AssetRelation, AssetVersion, Category, Project, User
+from ..models import Asset, AssetVersion, Category, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict
 from ..services import notify, storage, storage_config
@@ -24,12 +24,7 @@ def _target_storage(cos: Optional[dict]) -> str:
 
 
 def purge_asset(db: Session, asset: Asset, cos: Optional[dict]) -> None:
-    """删除资产本体：关联关系、各版本缩略图与 COS 实体文件。由调用方负责 commit。"""
-    db.query(AssetRelation).filter(
-        (AssetRelation.from_asset_id == asset.id)
-        | (AssetRelation.to_asset_id == asset.id)
-    ).delete(synchronize_session=False)
-
+    """删除资产本体：各版本缩略图与 COS 实体文件。由调用方负责 commit。"""
     for v in asset.versions:
         storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
         storage.delete_file(v.thumb_small, v.thumb_small_storage or "local", cos)

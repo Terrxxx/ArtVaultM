@@ -89,11 +89,6 @@ class StorageConfigIn(BaseModel):
 
 
 # ---------- 资产关联 ----------
-class RelationCreate(BaseModel):
-    to_asset_id: int
-    relation_type: str = "related"  # related / uses / used_by
-
-
 # ---------- 资产移动（文件夹） ----------
 class AssetMoveRequest(BaseModel):
     category_id: int = 0  # 0 表示根目录

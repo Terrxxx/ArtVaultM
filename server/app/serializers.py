@@ -103,7 +103,21 @@ def asset_to_dict(
     return data
 
 
+def subtree_counts(c: Category) -> tuple:
+    """返回 (子树内资产总数, 子树内子文件夹总数)。两者都包含整棵子树，用于删除确认文案。"""
+    assets = len(c.assets)
+    folders = 0
+    stack = list(c.children)
+    while stack:
+        node = stack.pop()
+        folders += 1
+        assets += len(node.assets)
+        stack.extend(node.children)
+    return assets, folders
+
+
 def category_to_dict(c: Category) -> dict:
+    subtree_assets, subtree_folders = subtree_counts(c)
     return {
         "id": c.id,
         "project_id": c.project_id,
@@ -112,6 +126,8 @@ def category_to_dict(c: Category) -> dict:
         "sort_order": c.sort_order,
         "is_system": c.is_system,
         "asset_count": len(c.assets),
+        "subtree_asset_count": subtree_assets,
+        "subtree_folder_count": subtree_folders,
     }
 
 

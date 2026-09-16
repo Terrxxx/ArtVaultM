@@ -2,10 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Button,
   Card,
-  Empty,
   Form,
   Input,
-  List,
   message,
   Popconfirm,
   Result,
@@ -19,8 +17,8 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, assetPath } from '../api'
-import type { Asset, AssetRelation, Category } from '../types'
+import { api } from '../api'
+import type { Asset, Category } from '../types'
 import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
@@ -31,8 +29,6 @@ export default function AssetEdit() {
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
-  const [relations, setRelations] = useState<AssetRelation[]>([])
-  const [siblings, setSiblings] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -51,14 +47,8 @@ export default function AssetEdit() {
         tags: a.tags?.join(',') ?? '',
         category_id: a.category_id ?? 0,
       })
-      const [cats, rels, sib] = await Promise.all([
-        api.listCategories(a.project_id),
-        api.listRelations(assetId),
-        api.listAssets(a.project_id),
-      ])
+      const cats = await api.listCategories(a.project_id)
       setCategories(cats)
-      setRelations(rels)
-      setSiblings(sib.filter((x) => x.id !== assetId))
       setError(null)
     } catch (e: any) {
       setError(e.response?.data?.detail || '资产不存在')
@@ -117,26 +107,6 @@ export default function AssetEdit() {
     }
   }
 
-  const addRelation = async (toId: number) => {
-    try {
-      await api.addRelation(assetId, toId)
-      message.success('已建立关联')
-      load()
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '关联失败')
-    }
-  }
-
-  const removeRelation = async (relId: number) => {
-    try {
-      await api.deleteRelation(relId)
-      message.success('已解除关联')
-      load()
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '解除失败')
-    }
-  }
-
   const cover = asset.cover_thumbnail_url || null
 
   return (
@@ -162,7 +132,7 @@ export default function AssetEdit() {
                   <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
                     <Input />
                   </Form.Item>
-                  <Form.Item name="category_id" label="文件夹">
+                  <Form.Item name="category_id" label="资产类型">
                     <Select
                       options={[
                         { value: 0, label: '根目录' },
@@ -218,61 +188,13 @@ export default function AssetEdit() {
             ),
           },
           {
-            key: 'relations',
-            label: `资产关联 (${relations.length})`,
-            children: (
-              <Card>
-                {canEdit && siblings.length > 0 && (
-                  <Select
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="关联到本项目其他资产（如动画→模型）"
-                    style={{ width: '100%', marginBottom: 16 }}
-                    value={null}
-                    options={siblings.map((s) => ({ value: s.id, label: s.name }))}
-                    onSelect={(v: number | null) => {
-                      if (v != null) addRelation(v)
-                    }}
-                  />
-                )}
-                <List
-                  dataSource={relations}
-                  locale={{ emptyText: <Empty description="暂无关联" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-                  renderItem={(r) => (
-                    <List.Item
-                      actions={
-                        canEdit
-                          ? [
-                              <Popconfirm key="rm" title="解除关联？" onConfirm={() => removeRelation(r.id)}>
-                                <Button type="link" danger size="small">
-                                  解除
-                                </Button>
-                              </Popconfirm>,
-                            ]
-                          : []
-                      }
-                    >
-                      <Space>
-                        <Link to={assetPath(r.asset)}>
-                          {r.direction === 'in' ? '← ' : '→ '}
-                          {r.asset.name}
-                        </Link>
-                        {r.asset.category_name && <Tag color="geekblue">{r.asset.category_name}</Tag>}
-                      </Space>
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            ),
-          },
-          {
             key: 'danger',
             label: '删除',
             children: (
               <Card title="删除资产">
                 <Space direction="vertical">
                   <Typography.Text type="secondary">
-                    删除后该资产的所有版本、文件、评论、点赞与关联都会一并移除，且无法恢复。
+                    删除后该资产的所有版本、文件、评论与点赞都会一并移除，且无法恢复。
                   </Typography.Text>
                   {canEdit ? (
                     <Popconfirm title="确定删除该资产？此操作不可恢复" onConfirm={onDelete}>

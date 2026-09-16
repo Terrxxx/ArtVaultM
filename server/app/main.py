@@ -18,7 +18,6 @@ from .api import (
     members,
     notifications,
     projects,
-    relations,
     subscriptions,
     users,
     versions,
@@ -197,7 +196,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ArtVault API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="ArtVault API", version="1.0.1", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -221,7 +220,6 @@ app.include_router(assets.router, prefix="/api", tags=["assets"])
 app.include_router(versions.router, prefix="/api", tags=["versions"])
 app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(likes.router, prefix="/api", tags=["likes"])
-app.include_router(relations.router, prefix="/api", tags=["relations"])
 app.include_router(subscriptions.router, prefix="/api", tags=["subscriptions"])
 app.include_router(notifications.router, prefix="/api", tags=["notifications"])
 
