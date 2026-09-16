@@ -38,6 +38,8 @@ export default function ProjectEdit() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // 受控的页签：分类/成员操作后的重新加载不会把页面弹回「基本信息」
+  const [activeTab, setActiveTab] = useState('basic')
   const [form] = Form.useForm()
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
@@ -65,7 +67,8 @@ export default function ProjectEdit() {
     load()
   }, [load])
 
-  if (loading) {
+  // 只有首次加载才铺满整页转圈；分类/成员操作后的刷新不再把整个页面拆掉重画
+  if (loading && !project) {
     return (
       <div style={{ textAlign: 'center', padding: 80 }}>
         <Spin size="large" />
@@ -114,6 +117,8 @@ export default function ProjectEdit() {
       </Space>
 
       <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: 'basic',
