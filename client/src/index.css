@@ -42,10 +42,10 @@
   --av-folder-bg: #bb800926;
   --av-folder-fg: #d29922;
   --av-unread-bg: #1f6feb1a;
-  /* 图区自带页面底色 #0d1117，空格子沿用 GitHub 的 #161b22，配 6% 描边勾出格子 */
-  --av-heat-canvas: #0d1117;
+  /* 图区底与卡片同色（#161b22），空格子用更深的 #0d1117，格子之间露出的就是卡片底色 */
+  --av-heat-canvas: #161b22;
   --av-heat-border: rgba(240, 246, 252, 0.06);
-  --av-heat-0: #161b22;
+  --av-heat-0: #0d1117;
   --av-heat-1: #0e4429;
   --av-heat-2: #006d32;
   --av-heat-3: #26a641;
