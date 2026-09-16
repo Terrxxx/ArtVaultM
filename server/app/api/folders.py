@@ -4,23 +4,14 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Folder, User
 from ..schemas import FolderCreate, FolderUpdate
-from ..serializers import folder_to_dict, subtree_counts
+from ..serializers import folder_to_dict
 from ..services import storage_config
+from ..services.folders import collect_subtree, subtree_counts
+from ..services.permissions import can_delete_folder
 from .assets import purge_asset
-from .deps import can_edit_project, ensure_project_access, get_current_user
+from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
-
-
-def collect_subtree(folder: Folder) -> list:
-    """该文件夹及其所有子孙文件夹（父在前），删除时按倒序处理。"""
-    nodes = []
-    stack = [folder]
-    while stack:
-        node = stack.pop()
-        nodes.append(node)
-        stack.extend(node.children)
-    return nodes
 
 
 @router.get("/projects/{project_id}/folders")
@@ -36,7 +27,7 @@ def list_folders(
         .order_by(Folder.sort_order)
         .all()
     )
-    return [folder_to_dict(f) for f in folders]
+    return [folder_to_dict(f, user) for f in folders]
 
 
 @router.post("/projects/{project_id}/folders")
@@ -60,7 +51,7 @@ def create_folder(
     db.add(folder)
     db.commit()
     db.refresh(folder)
-    return folder_to_dict(folder)
+    return folder_to_dict(folder, user)
 
 
 @router.patch("/folders/{folder_id}")
@@ -96,7 +87,7 @@ def update_folder(
             folder.parent_id = payload.parent_id
     db.commit()
     db.refresh(folder)
-    return folder_to_dict(folder)
+    return folder_to_dict(folder, user)
 
 
 @router.delete("/folders/{folder_id}")
@@ -108,16 +99,16 @@ def delete_folder(
     folder = db.get(Folder, folder_id)
     if folder is None:
         raise HTTPException(status_code=404, detail="文件夹不存在")
-    project = ensure_project_access(db, folder.project_id, user, write=True)
+    ensure_project_access(db, folder.project_id, user, write=True)
 
-    subtree = collect_subtree(folder)
-    asset_total, _ = subtree_counts(folder)
-    # 普通成员可以整理文件夹，但不能借删文件夹把项目里的资产一并删掉
-    if asset_total and not can_edit_project(project, user):
+    # 普通成员可以整理文件夹，但不能借删文件夹把项目里的资产一并删掉（规则见 services/permissions）
+    if not can_delete_folder(folder, user):
         raise HTTPException(
             status_code=403,
             detail="该文件夹内有资产，只有项目创建者或高级管理员可以删除",
         )
+
+    subtree = collect_subtree(folder)
 
     # 连同所有子孙文件夹及其中的资产一起删除，子级先删避免留下悬挂引用
     cos = storage_config.cos_params(db)

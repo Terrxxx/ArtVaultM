@@ -172,11 +172,8 @@ def list_all_projects(
         .order_by(Project.created_at.desc())
         .all()
     )
-    editable = is_super_admin(admin)
-    return [
-        {**project_to_dict(p), "can_edit": editable or p.owner_id == admin.id}
-        for p in projects
-    ]
+    # can_edit 由序列化器按统一规则算：高级管理员或项目创建者
+    return [project_to_dict(p, viewer=admin) for p in projects]
 
 
 # ---------- 腾讯 COS 配置（仅高级管理员） ----------

@@ -58,7 +58,9 @@ def create_project(
 
     db.commit()
     db.refresh(project)
-    return project_to_dict(project, include_categories=True, include_folders=True)
+    return project_to_dict(
+        project, include_categories=True, include_folders=True, viewer=user
+    )
 
 
 @router.get("/projects")
@@ -81,7 +83,7 @@ def list_projects(
         .order_by(Project.created_at.desc())
         .all()
     )
-    return [project_to_dict(p) for p in projects]
+    return [project_to_dict(p, viewer=user) for p in projects]
 
 
 @router.get("/projects/by-slug/{username}/{slug}")
@@ -103,7 +105,11 @@ def get_project_by_slug(
         raise HTTPException(status_code=404, detail="项目不存在")
     ensure_project_access(db, project.id, user)
     return project_to_dict(
-        project, include_categories=True, include_members=True, include_folders=True
+        project,
+        include_categories=True,
+        include_members=True,
+        include_folders=True,
+        viewer=user,
     )
 
 
@@ -128,7 +134,7 @@ def plaza(
     scores = stats.heat_scores(db, [p.id for p in projects])
     projects.sort(key=lambda p: scores.get(p.id, 0.0), reverse=True)
     return [
-        {**project_to_dict(p), "heat": scores.get(p.id, 0.0)}
+        {**project_to_dict(p, viewer=user), "heat": scores.get(p.id, 0.0)}
         for p in projects[: max(1, min(limit, 50))]
     ]
 
@@ -178,7 +184,11 @@ def get_project(
 ):
     project = ensure_project_access(db, project_id, user)
     return project_to_dict(
-        project, include_categories=True, include_members=True, include_folders=True
+        project,
+        include_categories=True,
+        include_members=True,
+        include_folders=True,
+        viewer=user,
     )
 
 
@@ -203,7 +213,11 @@ def update_project(
     db.commit()
     db.refresh(project)
     return project_to_dict(
-        project, include_categories=True, include_members=True, include_folders=True
+        project,
+        include_categories=True,
+        include_members=True,
+        include_folders=True,
+        viewer=user,
     )
 
 

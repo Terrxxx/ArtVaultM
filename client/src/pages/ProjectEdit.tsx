@@ -28,8 +28,6 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { Category, Project, ProjectMember, UserBrief } from '../types'
-import { isSuperAdmin } from '../types'
-import { useAuthStore } from '../store'
 
 export default function ProjectEdit() {
   const { id } = useParams()
@@ -41,7 +39,6 @@ export default function ProjectEdit() {
   // 受控的页签：分类/成员操作后的重新加载不会把页面弹回「基本信息」
   const [activeTab, setActiveTab] = useState('basic')
   const [form] = Form.useForm()
-  const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
   const load = useCallback(async () => {
@@ -77,7 +74,8 @@ export default function ProjectEdit() {
   }
   if (error || !project) return <Result status="404" title={error || '项目不存在'} />
 
-  const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
+  // 读后端算好的能力字段
+  const canEdit = project.can_edit
   if (!canEdit) return <Result status="403" title="只有项目创建者或高级管理员可以编辑该项目" />
 
   const onSaveBasic = async (values: any) => {

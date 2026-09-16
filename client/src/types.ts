@@ -58,6 +58,11 @@ export interface Folder {
   subtree_asset_count: number
   /** 子孙文件夹总数，不含自己 */
   subtree_folder_count: number
+  /* ----- 以下能力字段由后端算好，前端只读 ----- */
+  /** 能整理（新建子文件夹/重命名/移动）：项目成员即可 */
+  can_manage: boolean
+  /** 能删除（会连整个子树一起删）：创建者/高级管理员，或子树内无资产的成员 */
+  can_delete: boolean
 }
 
 export interface Asset {
@@ -86,6 +91,13 @@ export interface Asset {
   versions?: Version[]
   like_count: number
   liked_by_me: boolean
+  /* ----- 以下能力字段由后端算好，前端只读 ----- */
+  /** 能改资料/传新版本/换源/删历史版本 */
+  can_edit: boolean
+  /** 能删除整个资产 */
+  can_delete: boolean
+  /** 能拖到别的文件夹 */
+  can_move: boolean
 }
 
 export interface ProjectMember {
@@ -118,6 +130,11 @@ export interface Project {
   folders?: Folder[]
   members?: ProjectMember[]
   pending_members?: ProjectMember[]
+  /* ----- 以下能力字段由后端算好，前端只读 ----- */
+  /** 能改项目设置（改名/可见性/分类管理/成员/归档删除） */
+  can_edit: boolean
+  /** 能上传资产、整理文件夹、改资产 */
+  can_contribute: boolean
 }
 
 export interface Invitation {
@@ -173,10 +190,8 @@ export interface UserProfile {
   }[]
 }
 
-/** 管理后台项目列表项：多一个 can_edit 标记（仅高级管理员为 true） */
-export interface AdminProject extends Project {
-  can_edit?: boolean
-}
+/** 管理后台项目列表项：can_edit 现在由项目接口统一返回（高级管理员或项目创建者） */
+export type AdminProject = Project
 
 export interface StorageConfig {
   provider: 'local' | 'cos'

@@ -7,12 +7,19 @@ from sqlalchemy.orm import Session
 from ..core.security import decode_token
 from ..database import get_db
 from ..models import Asset, Project, ProjectMember, User
+# 权限判定的唯一出处；这里再导出一次，接口层照旧从 deps 导入
+from ..services.permissions import (  # noqa: F401
+    ADMIN,
+    MEMBER,
+    SUPER_ADMIN,
+    can_contribute,
+    can_edit_asset,
+    can_edit_project,
+    is_admin_like,
+    is_super_admin,
+)
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
-MEMBER = "member"
-ADMIN = "admin"
-SUPER_ADMIN = "super_admin"
 
 
 def get_current_user(
@@ -40,15 +47,6 @@ def is_deleted(user: User) -> bool:
     return user.deleted_at is not None
 
 
-def is_super_admin(user: User) -> bool:
-    return user.role == SUPER_ADMIN
-
-
-def is_admin_like(user: User) -> bool:
-    """管理员或高级管理员（可进入管理后台）。"""
-    return user.role in (ADMIN, SUPER_ADMIN)
-
-
 def get_current_admin(user: User = Depends(get_current_user)) -> User:
     """管理后台入口：管理员 / 高级管理员。"""
     if not is_admin_like(user):
@@ -73,16 +71,6 @@ def can_manage_target(actor: User, target: User) -> bool:
     if actor.role == ADMIN:
         return target.role == MEMBER
     return False
-
-
-def can_edit_project(project: Project, user: User) -> bool:
-    """仅项目创建者可编辑；高级管理员例外（通过管理后台入口）。"""
-    return is_super_admin(user) or project.owner_id == user.id
-
-
-def can_edit_asset(asset: Asset, user: User) -> bool:
-    """仅资产创建者可编辑；高级管理员例外（通过管理后台入口）。"""
-    return is_super_admin(user) or asset.created_by == user.id
 
 
 def is_project_member(db: Session, project_id: int, user_id: int) -> bool:
@@ -116,14 +104,13 @@ def ensure_project_access(
     is_owner = project.owner_id == user.id
     is_member = is_owner or is_project_member(db, project.id, user.id)
     can_review = is_admin_like(user)
-    can_write = is_member or is_super_admin(user)
 
     if project.visibility == "private" and not (is_member or can_review):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问该项目"
         )
 
-    if write and not can_write:
+    if write and not can_contribute(project, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="仅项目所有者、成员或高级管理员可操作"
         )

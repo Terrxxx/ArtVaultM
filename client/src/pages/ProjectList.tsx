@@ -29,7 +29,6 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { Project } from '../types'
-import { useAuthStore } from '../store'
 
 export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
@@ -40,7 +39,6 @@ export default function ProjectList() {
   const [submitting, setSubmitting] = useState(false)
   const [createForm] = Form.useForm()
   const navigate = useNavigate()
-  const me = useAuthStore((s) => s.user)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,7 +76,8 @@ export default function ProjectList() {
     }
   }
 
-  const isMine = (p: Project) => me?.role === 'admin' || p.owner_id === me?.id
+  // 读后端算好的能力字段（创建者或高级管理员）
+  const isMine = (p: Project) => p.can_edit
 
   const renderCard = (p: Project) => (
     <Col xs={24} sm={12} lg={8} key={p.id}>

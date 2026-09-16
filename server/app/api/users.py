@@ -97,7 +97,7 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
             restricted_ids.add(a.project_id)
             continue
         bucket = grouped.setdefault(a.project_id, {"project": a.project, "assets": []})
-        bucket["assets"].append(asset_to_dict(a, current_user_id=viewer.id))
+        bucket["assets"].append(asset_to_dict(a, viewer=viewer))
 
     projects = [
         {

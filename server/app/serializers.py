@@ -2,6 +2,15 @@ from typing import Optional
 
 from .models import Asset, AssetVersion, Category, Folder, Project, ProjectMember, User
 from .services import storage
+from .services.folders import subtree_counts
+from .services.permissions import (
+    can_contribute,
+    can_delete_asset,
+    can_delete_folder,
+    can_edit_asset,
+    can_edit_project,
+    can_move_asset,
+)
 
 
 def user_brief(u: Optional[User]) -> Optional[dict]:
@@ -52,8 +61,10 @@ def version_to_dict(v: AssetVersion) -> dict:
 
 
 def asset_to_dict(
-    a: Asset, include_versions: bool = False, current_user_id: Optional[int] = None
+    a: Asset, include_versions: bool = False, viewer: Optional[User] = None
 ) -> dict:
+    """viewer 传当前登录用户：既用于 liked_by_me，也用于算 can_edit / can_delete。"""
+    current_user_id = viewer.id if viewer else None
     latest = None
     for v in a.versions:
         if v.is_latest:
@@ -99,23 +110,14 @@ def asset_to_dict(
             if current_user_id is not None
             else False
         ),
+        # 能力字段：前端据此显示按钮，不再自己推算权限
+        "can_edit": can_edit_asset(a, viewer),
+        "can_delete": can_delete_asset(a, viewer),
+        "can_move": can_move_asset(a, viewer),
     }
     if include_versions:
         data["versions"] = [version_to_dict(v) for v in a.versions]
     return data
-
-
-def subtree_counts(f: Folder) -> tuple:
-    """返回 (子树内资产总数, 子树内子文件夹总数)。两者都包含整棵子树，用于删除确认文案。"""
-    assets = len(f.assets)
-    folders = 0
-    stack = list(f.children)
-    while stack:
-        node = stack.pop()
-        folders += 1
-        assets += len(node.assets)
-        stack.extend(node.children)
-    return assets, folders
 
 
 def categories_in_display_order(categories) -> list:
@@ -140,7 +142,7 @@ def category_to_dict(c: Category) -> dict:
     }
 
 
-def folder_to_dict(f: Folder) -> dict:
+def folder_to_dict(f: Folder, viewer: Optional[User] = None) -> dict:
     subtree_assets, subtree_folders = subtree_counts(f)
     return {
         "id": f.id,
@@ -151,6 +153,9 @@ def folder_to_dict(f: Folder) -> dict:
         "asset_count": len(f.assets),
         "subtree_asset_count": subtree_assets,
         "subtree_folder_count": subtree_folders,
+        # 能力字段：成员也能整理文件夹，但子树里有资产时只有创建者/高级管理员能删
+        "can_manage": can_contribute(f.project, viewer),
+        "can_delete": can_delete_folder(f, viewer),
     }
 
 
@@ -168,6 +173,7 @@ def project_to_dict(
     include_categories: bool = False,
     include_members: bool = False,
     include_folders: bool = False,
+    viewer: Optional[User] = None,
 ) -> dict:
     accepted = [m for m in p.members if m.status == "accepted"]
     pending = [m for m in p.members if m.status != "accepted"]
@@ -188,13 +194,16 @@ def project_to_dict(
         "folder_count": len(p.folders),
         "member_count": len(accepted),
         "pending_count": len(pending),
+        # 能力字段：can_edit 管项目设置，can_contribute 管上传/整理文件夹
+        "can_edit": can_edit_project(p, viewer),
+        "can_contribute": can_contribute(p, viewer),
     }
     if include_categories:
         data["categories"] = [
             category_to_dict(c) for c in categories_in_display_order(p.categories)
         ]
     if include_folders:
-        data["folders"] = [folder_to_dict(f) for f in p.folders]
+        data["folders"] = [folder_to_dict(f, viewer) for f in p.folders]
     if include_members:
         data["members"] = [member_to_dict(m) for m in accepted]
         data["pending_members"] = [member_to_dict(m) for m in pending]

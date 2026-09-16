@@ -35,12 +35,10 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, downloadVersion, formatSize, projectPath, userPath } from '../api'
-import type { Asset, Project, Version } from '../types'
+import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
 import UploadVersionModal from '../components/UploadVersionModal'
-import { isSuperAdmin } from '../types'
-import { useAuthStore } from '../store'
 
 // 版本历史默认展示的条数
 const VERSION_PREVIEW = 4
@@ -52,8 +50,6 @@ export default function AssetDetail() {
   const { id } = useParams()
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
-  // 项目成员列表决定「谁能改这个资产」，单独取一次
-  const [project, setProject] = useState<Project | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -70,7 +66,6 @@ export default function AssetDetail() {
   const [changelogTarget, setChangelogTarget] = useState<Version | null>(null)
   const [changelogText, setChangelogText] = useState('')
   const [changelogSubmitting, setChangelogSubmitting] = useState(false)
-  const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
   const load = useCallback(async () => {
@@ -79,7 +74,6 @@ export default function AssetDetail() {
       const [a, subs] = await Promise.all([api.getAsset(assetId), api.listSubscriptions()])
       setAsset(a)
       setSubscribed(subs.some((s) => s.target_type === 'asset' && s.target_id === assetId))
-      setProject(await api.getProject(a.project_id))
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
     } finally {
@@ -109,14 +103,8 @@ export default function AssetDetail() {
   const versions = asset.versions || []
   // 左上角固定展示资产封面，不随所选版本变化
   const coverSrc = asset.cover_thumbnail_url || null
-  // 项目内的资产由项目成员共同维护：改资料、传新版本、换源、删历史版本都能做；
-  // 删除整个资产仍然只有创建者或高级管理员能动
-  const canWrite =
-    !!user &&
-    (user.id === asset.created_by ||
-      isSuperAdmin(user.role) ||
-      project?.owner_id === user.id ||
-      (project?.members || []).some((m) => m.user?.id === user.id))
+  // 能改资料、传新版本、换源、删历史版本：由后端算好（项目成员或资产创建者）
+  const canWrite = asset.can_edit
   const totalDownloads = versions.reduce((sum, v) => sum + (v.download_count || 0), 0)
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
 

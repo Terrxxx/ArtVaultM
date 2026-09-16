@@ -18,9 +18,7 @@ import {
 import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
-import type { Asset, Category, Project } from '../types'
-import { isSuperAdmin } from '../types'
-import { useAuthStore } from '../store'
+import type { Asset, Category } from '../types'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
 
@@ -29,12 +27,10 @@ export default function AssetEdit() {
   const assetId = Number(id)
   const [asset, setAsset] = useState<Asset | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
-  const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form] = Form.useForm()
-  const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
   const load = useCallback(async () => {
@@ -48,12 +44,7 @@ export default function AssetEdit() {
         tags: a.tags?.join(',') ?? '',
         category_id: a.category_id ?? undefined,
       })
-      const [cats, proj] = await Promise.all([
-        api.listCategories(a.project_id),
-        api.getProject(a.project_id),
-      ])
-      setCategories(cats)
-      setProject(proj)
+      setCategories(await api.listCategories(a.project_id))
       setError(null)
     } catch (e: any) {
       setError(e.response?.data?.detail || '资产不存在')
@@ -75,15 +66,9 @@ export default function AssetEdit() {
   }
   if (error || !asset) return <Result status="404" title={error || '资产不存在'} />
 
-  // 项目内的资产由项目成员共同维护；删除整个资产仍然只有创建者或高级管理员能动
-  const canEdit =
-    !!me &&
-    (asset.created_by === me.id ||
-      isSuperAdmin(me.role) ||
-      project?.owner_id === me.id ||
-      (project?.members || []).some((m) => m.user?.id === me.id))
-  // 删除整个资产仍然是创建者/高级管理员专属（版本级的删除在资产页）
-  const canDelete = asset.created_by === me?.id || isSuperAdmin(me?.role)
+  // 权限读后端算好的能力字段（见 server/app/services/permissions.py）
+  const canEdit = asset.can_edit
+  const canDelete = asset.can_delete
 
   const onSave = async (values: any) => {
     const fd = new FormData()

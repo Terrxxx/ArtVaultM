@@ -8,7 +8,8 @@ from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict
 from ..services import notify, storage, storage_config
-from .deps import can_edit_asset, ensure_project_access, get_current_user, is_super_admin
+from ..services.permissions import can_delete_asset, can_move_asset
+from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
 
@@ -110,7 +111,7 @@ def list_assets(
         fmt_low = fmt.lower()
         assets = [a for a in assets if a.versions and a.versions[0].file_format == fmt_low]
 
-    result = [asset_to_dict(a, current_user_id=user.id) for a in assets]
+    result = [asset_to_dict(a, viewer=user) for a in assets]
 
     if tag:
         result = [a for a in result if tag in (a.get("tags") or [])]
@@ -240,7 +241,7 @@ def create_asset(
 
     db.commit()
     db.refresh(asset)
-    data = asset_to_dict(asset, include_versions=True, current_user_id=user.id)
+    data = asset_to_dict(asset, include_versions=True, viewer=user)
     data["deduped"] = deduped
     return data
 
@@ -255,7 +256,7 @@ def get_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
     ensure_project_access(db, asset.project_id, user)
-    return asset_to_dict(asset, include_versions=True, current_user_id=user.id)
+    return asset_to_dict(asset, include_versions=True, viewer=user)
 
 
 @router.patch("/assets/{asset_id}")
@@ -310,7 +311,7 @@ def update_asset(
 
     db.commit()
     db.refresh(asset)
-    return asset_to_dict(asset, include_versions=True, current_user_id=user.id)
+    return asset_to_dict(asset, include_versions=True, viewer=user)
 
 
 @router.patch("/assets/{asset_id}/folder")
@@ -328,12 +329,7 @@ def move_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
 
-    project = db.get(Project, asset.project_id)
-    if not (
-        is_super_admin(user)
-        or (project is not None and project.owner_id == user.id)
-        or asset.created_by == user.id
-    ):
+    if not can_move_asset(asset, user):
         raise HTTPException(
             status_code=403, detail="仅资产创建者或项目所有者可移动该资产"
         )
@@ -348,7 +344,7 @@ def move_asset(
         asset.folder_id = None
     db.commit()
     db.refresh(asset)
-    return asset_to_dict(asset, current_user_id=user.id)
+    return asset_to_dict(asset, viewer=user)
 
 
 @router.delete("/assets/{asset_id}")
@@ -361,7 +357,7 @@ def delete_asset(
     if asset is None:
         raise HTTPException(status_code=404, detail="资产不存在")
 
-    if not can_edit_asset(asset, user):
+    if not can_delete_asset(asset, user):
         raise HTTPException(
             status_code=403, detail="仅资产创建者或高级管理员可删除该资产"
         )

@@ -35,12 +35,10 @@ import {
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '../types'
-import { isSuperAdmin } from '../types'
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
 import Leaderboard from '../components/Leaderboard'
 import UploadAssetModal from '../components/UploadAssetModal'
-import { useAuthStore } from '../store'
 
 function ProjectDetailView({ project: initial }: { project: Project }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -74,7 +72,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
-  const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
   // 进/出文件夹时同步 ?folder=，这样刷新、分享、从资产页返回都能落回同一个目录
@@ -145,18 +142,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   }, [])
 
   // 编辑项目：仅创建者本人或高级管理员
-  const canEdit = project.owner_id === me?.id || isSuperAdmin(me?.role)
-  // 上传资产：需要先受邀加入项目（所有者/成员），高级管理员例外
-  const isMember =
-    canEdit ||
-    project.owner_id === me?.id ||
-    (project.members || []).some((m) => m.user?.id === me?.id)
-  // 移动资产：项目所有者/高级管理员，或资产创建者本人
-  const canMoveAsset = (a: Asset) => canEdit || a.created_by === me?.id
-  // 整理文件夹（新建/重命名/移动/删空文件夹）：项目成员即可
-  const canManageFolder = isMember
-  // 删除会连资产一起删的文件夹：仅项目创建者或高级管理员
-  const canDeleteFolder = (c: Folder) => canEdit || !c.subtree_asset_count
+  // 权限一律读后端算好的能力字段（见 server/app/services/permissions.py），前端不再自己推算
+  // 改项目设置（改名/可见性/分类/成员/归档删除）：创建者或高级管理员
+  const canEdit = project.can_edit
+  // 上传资产 / 整理文件夹 / 改资产：项目成员即可
+  const isMember = project.can_contribute
+  const canManageFolder = project.can_contribute
+  const canMoveAsset = (a: Asset) => a.can_move
+  const canDeleteFolder = (c: Folder) => c.can_delete
   // 删除时需要输入名称二次确认：整个子树里有资产或有子文件夹
   const needsConfirm = (c: Folder) => c.subtree_asset_count > 0 || c.subtree_folder_count > 0
 
