@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Asset, User
 from ..serializers import asset_to_dict, user_brief
-from ..services import stats
+from ..services import badges, stats
 from .deps import get_current_user
 
 router = APIRouter()
@@ -122,7 +122,12 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
             }
         )
 
-    return {"user": user_brief(target), "stats": complete_stats, "projects": projects}
+    return {
+        "user": user_brief(target),
+        "stats": complete_stats,
+        "projects": projects,
+        "badges": badges.compute(db, target.id),
+    }
 
 
 @router.get("/users/by-username/{username}/activity")

@@ -60,7 +60,7 @@ export default function UpdateLog({
         locale={{
           emptyText: (
             <Empty
-              description={date ? '这一天没有更新' : '暂无更新记录'}
+              description={date ? '这一天风平浪静' : '还没有更新记录'}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ),

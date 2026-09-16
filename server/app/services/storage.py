@@ -412,6 +412,27 @@ def resolve_path(rel_path: str) -> Path:
     return Path(settings.upload_dir) / rel_path
 
 
+def fetch_to(rel_path: str, storage: str, dest: Path, cos: Optional[dict] = None) -> bool:
+    """把存储里的文件取到本地目标路径（本地直接复制，COS 下载）。取不到返回 False。"""
+    if not rel_path:
+        return False
+    try:
+        if storage == "cos":
+            if not cos:
+                return False
+            storage_config.build_client(cos).download_file(
+                Bucket=cos["bucket"], Key=rel_path, DestFilePath=str(dest)
+            )
+            return True
+        src = resolve_path(rel_path)
+        if not src.is_file():
+            return False
+        shutil.copy2(src, dest)
+        return True
+    except Exception:  # noqa: BLE001 - 单个文件取不到不该让整次打包失败
+        return False
+
+
 def file_exists(rel_path: str, storage: str = "local", cos: Optional[dict] = None) -> bool:
     """判断文件是否还在（本地磁盘或 COS）。"""
     if storage == "cos":

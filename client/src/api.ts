@@ -1,9 +1,11 @@
 import axios from 'axios'
 import { useAuthStore } from './store'
+import { showUnlockedBadges } from './unlockPopup'
 import type {
   ActivityResponse,
   AdminProject,
   Asset,
+  Badge,
   Category,
   Comment,
   DownloadStats,
@@ -42,12 +44,21 @@ client.interceptors.response.use(
   },
 )
 
+/** 会在响应里带回本次新解锁成就的接口，统一在这里弹一下提示（弹窗细节见 unlockPopup） */
+function unlockable<T>(p: Promise<T>): Promise<T> {
+  return p.then((data) => {
+    showUnlockedBadges((data as { new_badges?: Badge[] | null } | null)?.new_badges)
+    return data
+  })
+}
+
 export const api = {
   // ---------- 认证 ----------
   login: (username: string, password: string) =>
     client.post<{ access_token: string }>('/auth/login', { username, password }).then((r) => r.data),
   me: () => client.get<User>('/auth/me').then((r) => r.data),
-  updateProfile: (form: FormData) => client.patch<User>('/auth/profile', form).then((r) => r.data),
+  updateProfile: (form: FormData) =>
+    unlockable(client.patch<User>('/auth/profile', form).then((r) => r.data)),
   changePassword: (old_password: string, new_password: string) =>
     client.post('/auth/change-password', { old_password, new_password }).then((r) => r.data),
 
@@ -92,7 +103,7 @@ export const api = {
     description?: string
     github_repo_url?: string
     visibility: string
-  }) => client.post<Project>('/projects', data).then((r) => r.data),
+  }) => unlockable(client.post<Project>('/projects', data).then((r) => r.data)),
   updateProject: (id: number, data: Record<string, unknown>) =>
     client.patch<Project>(`/projects/${id}`, data).then((r) => r.data),
   deleteProject: (id: number) => client.delete(`/projects/${id}`).then((r) => r.data),
@@ -135,12 +146,14 @@ export const api = {
   listFolders: (projectId: number) =>
     client.get<Folder[]>(`/projects/${projectId}/folders`).then((r) => r.data),
   createFolder: (projectId: number, name: string, parentId?: number | null) =>
-    client
-      .post<Folder>(`/projects/${projectId}/folders`, {
-        name,
-        parent_id: parentId ?? null,
-      })
-      .then((r) => r.data),
+    unlockable(
+      client
+        .post<Folder>(`/projects/${projectId}/folders`, {
+          name,
+          parent_id: parentId ?? null,
+        })
+        .then((r) => r.data),
+    ),
   updateFolder: (folderId: number, data: { name?: string; sort_order?: number; parent_id?: number }) =>
     client.patch<Folder>(`/folders/${folderId}`, data).then((r) => r.data),
   deleteFolder: (folderId: number) =>
@@ -150,13 +163,23 @@ export const api = {
   listAssets: (projectId: number, params?: Record<string, unknown>) =>
     client.get<Asset[]>(`/projects/${projectId}/assets`, { params }).then((r) => r.data),
   getAsset: (id: number) => client.get<Asset>(`/assets/${id}`).then((r) => r.data),
-  createAsset: (form: FormData) => client.post<Asset>('/assets', form).then((r) => r.data),
+  createAsset: (form: FormData) =>
+    unlockable(client.post<Asset>('/assets', form).then((r) => r.data)),
   updateAsset: (id: number, form: FormData) =>
-    client.patch<Asset>(`/assets/${id}`, form).then((r) => r.data),
+    unlockable(client.patch<Asset>(`/assets/${id}`, form).then((r) => r.data)),
   deleteAsset: (id: number) => client.delete(`/assets/${id}`).then((r) => r.data),
   /** 把资产移动到指定文件夹（0 = 项目根目录） */
   moveAsset: (id: number, folderId: number) =>
     client.patch<Asset>(`/assets/${id}/folder`, { folder_id: folderId }).then((r) => r.data),
+
+  // ---------- 打包下载 ----------
+  /** 取一个短期令牌：打包下载走浏览器原生下载，令牌放在 URL 里 */
+  zipToken: (projectId: number, folderId: number) =>
+    client
+      .get<{ token: string; url: string }>(`/projects/${projectId}/zip-token`, {
+        params: { folder_id: folderId },
+      })
+      .then((r) => r.data),
 
   // ---------- 回收站 ----------
   /** 项目回收站：已软删除的资产 */
@@ -201,7 +224,7 @@ export const api = {
   listVersions: (assetId: number) =>
     client.get<Version[]>(`/assets/${assetId}/versions`).then((r) => r.data),
   uploadVersion: (assetId: number, form: FormData) =>
-    client.post<Version>(`/assets/${assetId}/versions`, form).then((r) => r.data),
+    unlockable(client.post<Version>(`/assets/${assetId}/versions`, form).then((r) => r.data)),
   /** 换源：替换某个已有版本的文件，版本号与下载数不变 */
   replaceVersionSource: (versionId: number, form: FormData) =>
     client.post<Version>(`/versions/${versionId}/source`, form).then((r) => r.data),
@@ -212,7 +235,7 @@ export const api = {
   rollbackVersion: (versionId: number, changelog?: string) => {
     const fd = new FormData()
     if (changelog != null) fd.append('changelog', changelog)
-    return client.post<Version>(`/versions/${versionId}/rollback`, fd).then((r) => r.data)
+    return unlockable(client.post<Version>(`/versions/${versionId}/rollback`, fd).then((r) => r.data))
   },
   deleteVersion: (versionId: number) =>
     client.delete(`/versions/${versionId}`).then((r) => r.data),
@@ -231,7 +254,11 @@ export const api = {
 
   // ---------- 点赞 ----------
   toggleLike: (assetId: number) =>
-    client.post<{ liked: boolean; like_count: number }>(`/assets/${assetId}/like`).then((r) => r.data),
+    unlockable(
+      client
+        .post<{ liked: boolean; like_count: number }>(`/assets/${assetId}/like`)
+        .then((r) => r.data),
+    ),
 
   // ---------- 评论 ----------
   /** version 传版本号（如 3），只返回正文里 @ 到该版本的评论 */
@@ -242,7 +269,9 @@ export const api = {
       })
       .then((r) => r.data),
   addComment: (assetId: number, content: string, parent_id?: number) =>
-    client.post<Comment>(`/assets/${assetId}/comments`, { content, parent_id }).then((r) => r.data),
+    unlockable(
+      client.post<Comment>(`/assets/${assetId}/comments`, { content, parent_id }).then((r) => r.data),
+    ),
   deleteComment: (id: number) => client.delete(`/comments/${id}`).then((r) => r.data),
 
   // ---------- 订阅 ----------

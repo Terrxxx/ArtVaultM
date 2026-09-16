@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -265,6 +266,21 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     actor = relationship("User", foreign_keys=[actor_id])
+
+
+class UserBadge(Base):
+    """已提醒过的成就。只当账本用：解锁状态始终由实时统计算，这里只保证「只提醒一次」。
+
+    记录永久保留——成就因资产被删而重新上锁，之后再满足条件也不二次提醒。
+    """
+
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_key", name="uq_user_badge"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    badge_key = Column(String, nullable=False)
+    unlocked_at = Column(DateTime, default=datetime.utcnow)
 
 
 class StorageConfig(Base):

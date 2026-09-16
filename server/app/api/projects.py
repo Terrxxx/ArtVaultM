@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
 from ..serializers import project_to_dict
-from ..services import stats
+from ..services import badges, stats
 from ..services.asset_types import seed_default_categories
 from ..services.slug import slugify
 from .deps import (
@@ -56,11 +56,15 @@ def create_project(
     # 默认资产类型；文件夹不预建，由用户在项目页按需创建
     seed_default_categories(db, project.id)
 
+    new_badges = badges.sync(db, user.id)
+
     db.commit()
     db.refresh(project)
-    return project_to_dict(
+    data = project_to_dict(
         project, include_categories=True, include_folders=True, viewer=user
     )
+    data["new_badges"] = new_badges
+    return data
 
 
 @router.get("/projects")

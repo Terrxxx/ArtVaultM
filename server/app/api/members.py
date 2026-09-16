@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Project, ProjectMember, User
 from ..serializers import member_to_dict, project_to_dict
-from ..services import notify
+from ..services import badges, notify
 from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
@@ -163,6 +163,8 @@ def accept_invitation(
             project_id=project.id,
             content=f"{user.nickname or user.username} 已接受加入项目「{project.name}」",
         )
+        # 「人多势众」这类成就算在项目所有者头上
+        badges.sync(db, project.owner_id)
 
     db.commit()
     return {"ok": True, "project_id": member.project_id}

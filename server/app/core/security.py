@@ -54,3 +54,35 @@ def decode_stream_token(token: str, version_id: int) -> int:
     if payload.get("scope") != STREAM_SCOPE or payload.get("ver") != version_id:
         raise ValueError("预览令牌不匹配")
     return int(payload["sub"])
+
+
+# ---------- 打包下载用的短期令牌 ----------
+# 打包下载同样要交给浏览器原生下载（大 zip 不能用 XHR 拉进内存），
+# 所以照预览的做法：签一个只对该项目 + 该目录有效、且很快过期的令牌放进 URL。
+
+ZIP_SCOPE = "zip"
+ZIP_TOKEN_MINUTES = 30
+
+
+def create_zip_token(project_id: int, folder_id: int, user_id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ZIP_TOKEN_MINUTES)
+    payload = {
+        "sub": str(user_id),
+        "proj": project_id,
+        "folder": folder_id,
+        "scope": ZIP_SCOPE,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def decode_zip_token(token: str, project_id: int, folder_id: int) -> int:
+    """校验打包令牌并返回用户 id；不合法直接抛异常。"""
+    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+    if (
+        payload.get("scope") != ZIP_SCOPE
+        or payload.get("proj") != project_id
+        or payload.get("folder") != folder_id
+    ):
+        raise ValueError("下载令牌不匹配")
+    return int(payload["sub"])

@@ -8,7 +8,7 @@ from ..database import get_db
 from ..models import User
 from ..schemas import ChangePasswordRequest, LoginRequest, Token
 from ..serializers import user_out
-from ..services import storage, storage_config
+from ..services import badges, storage, storage_config
 from .deps import get_current_user
 
 router = APIRouter()
@@ -24,6 +24,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if user.status != "active":
         raise HTTPException(status_code=403, detail="账号已被禁用")
     token = create_access_token(user.id, user.role)
+    # 登录是成就的「补录」入口：把按历史数据已满足、但还没提醒过的成就一次发出来
+    badges.sync(db, user.id)
+    db.commit()
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -57,9 +60,13 @@ def update_profile(
             storage.delete_file(user.avatar, user.avatar_storage or "local", cos)
             user.avatar = saved["path"]
             user.avatar_storage = saved["storage"]
+    # 填昵称 / 头像 / GitHub 可能凑齐「门面齐整」
+    new_badges = badges.sync(db, user.id)
     db.commit()
     db.refresh(user)
-    return user_out(user)
+    data = user_out(user)
+    data["new_badges"] = new_badges
+    return data
 
 
 @router.post("/change-password")

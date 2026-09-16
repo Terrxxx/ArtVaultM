@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, DownloadLog, User
 from ..schemas import VersionChangelogUpdate
 from ..serializers import version_to_dict
-from ..services import notify, storage, storage_config
+from ..services import badges, notify, storage, storage_config
 from .assets import take_staged
 from .deps import ensure_project_access, get_current_user
 
@@ -172,10 +172,13 @@ def upload_version(
             content=summary,
         )
 
+    new_badges = badges.sync(db, user.id)
+
     db.commit()
     db.refresh(version)
     data = version_to_dict(version)
     data["deduped"] = deduped
+    data["new_badges"] = new_badges
     return data
 
 
@@ -196,6 +199,8 @@ def get_download_url(
     ensure_project_access(db, version.asset.project_id, user)
 
     db.add(DownloadLog(asset_version_id=version.id, user_id=user.id))
+    # 被下载的是资产作者的成就，作者不在这次请求里，只发消息不弹窗
+    badges.sync(db, version.asset.created_by)
     db.commit()
 
     if version.storage == "cos":
@@ -229,6 +234,8 @@ def download_version(
     ensure_project_access(db, version.asset.project_id, user)
 
     db.add(DownloadLog(asset_version_id=version.id, user_id=user.id))
+    # 同上：这里解锁的是资产作者
+    badges.sync(db, version.asset.created_by)
     db.commit()
 
     # COS：生成带签名的临时链接，浏览器直接到对象存储取数据（链接到期即失效）
@@ -455,9 +462,13 @@ def rollback_version(
             content=summary,
         )
 
+    new_badges = badges.sync(db, user.id)
+
     db.commit()
     db.refresh(version)
-    return version_to_dict(version)
+    data = version_to_dict(version)
+    data["new_badges"] = new_badges
+    return data
 
 
 @router.patch("/versions/{version_id}")

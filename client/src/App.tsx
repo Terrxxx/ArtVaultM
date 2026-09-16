@@ -15,6 +15,7 @@ import ProjectList from './pages/ProjectList'
 import Settings from './pages/Settings'
 import UserProfile from './pages/UserProfile'
 import { useAuthStore } from './store'
+import ArtSpin from './components/ArtSpin'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -44,9 +45,7 @@ function RedirectUserById() {
 
   if (!to) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin />
-      </div>
+      <ArtSpin />
     )
   }
   return <Navigate to={to} replace />

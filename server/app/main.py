@@ -14,6 +14,7 @@ from .api import (
     auth,
     categories,
     comments,
+    downloads,
     folders,
     likes,
     members,
@@ -272,6 +273,7 @@ app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(folders.router, prefix="/api", tags=["folders"])
 app.include_router(assets.router, prefix="/api", tags=["assets"])
 app.include_router(uploads.router, prefix="/api", tags=["uploads"])
+app.include_router(downloads.router, prefix="/api", tags=["downloads"])
 app.include_router(versions.router, prefix="/api", tags=["versions"])
 app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(likes.router, prefix="/api", tags=["likes"])

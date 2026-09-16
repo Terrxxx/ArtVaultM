@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Avatar, Button, Card, Empty, List, Space, Tag, Typography, message } from 'antd'
 import { TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { api, userPath } from '../api'
+import { useAuthStore } from '../store'
 import type { Invitation, Notification } from '../types'
 
 const TYPE_LABEL: Record<string, { text: string; color: string }> = {
@@ -10,9 +11,11 @@ const TYPE_LABEL: Record<string, { text: string; color: string }> = {
   mention: { text: '@提及', color: 'purple' },
   invite: { text: '邀请', color: 'green' },
   update: { text: '更新', color: 'orange' },
+  badge: { text: '成就', color: 'gold' },
 }
 
 export default function Notifications() {
+  const user = useAuthStore((s) => s.user)
   const [items, setItems] = useState<Notification[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,13 +118,20 @@ export default function Notifications() {
 
       <Card loading={loading} styles={{ body: { padding: items.length ? 0 : 24 } }}>
         {items.length === 0 && !loading ? (
-          <Empty description="暂无消息" />
+          <Empty description="静悄悄的，没人找你" />
         ) : (
           <List
             dataSource={items}
             renderItem={(n) => {
               const meta = TYPE_LABEL[n.type] || { text: n.type, color: 'default' }
-              const link = n.asset_id ? `/assets/${n.asset_id}` : n.project_id ? `/projects/${n.project_id}` : null
+              // 成就消息没有资产/项目，点进去看自己的主页
+              const link = n.asset_id
+                ? `/assets/${n.asset_id}`
+                : n.project_id
+                  ? `/projects/${n.project_id}`
+                  : n.type === 'badge'
+                    ? userPath(user)
+                    : null
               const inner = (
                 <List.Item
                   onClick={() => onClickItem(n)}

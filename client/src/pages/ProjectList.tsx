@@ -14,7 +14,6 @@ import {
   Segmented,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
 } from 'antd'
@@ -29,6 +28,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { Project } from '../types'
+import ArtSpin from '../components/ArtSpin'
 
 export default function ProjectList() {
   const [mine, setMine] = useState<Project[]>([])
@@ -180,15 +180,13 @@ export default function ProjectList() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 80 }}>
-          <Spin size="large" />
-        </div>
+        <ArtSpin />
       ) : (
         <Space direction="vertical" size={28} style={{ width: '100%' }}>
           <div>
             {mine.length === 0 ? (
               <Empty
-                description={archived ? '没有已归档的项目' : '还没有项目，点击右上角新建'}
+                description={archived ? '归档区是空的，说明大家都还在干活' : '还没有项目——先开个荒？'}
                 style={{ marginTop: 24, marginBottom: 24 }}
               />
             ) : (

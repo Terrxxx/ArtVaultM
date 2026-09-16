@@ -13,7 +13,6 @@ import {
   Modal,
   Row,
   Space,
-  Spin,
   Tag,
   Typography,
   Upload,
@@ -40,6 +39,7 @@ import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
 import UploadVersionModal from '../components/UploadVersionModal'
+import ArtSpin from '../components/ArtSpin'
 
 // 版本历史默认展示的条数
 const VERSION_PREVIEW = 4
@@ -98,9 +98,7 @@ export default function AssetDetail() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   if (!asset) return <Empty />

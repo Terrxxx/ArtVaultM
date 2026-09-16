@@ -9,7 +9,6 @@ import {
   Result,
   Select,
   Space,
-  Spin,
   Tabs,
   Tag,
   Typography,
@@ -19,6 +18,7 @@ import { ArrowLeftOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/i
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import type { Asset, Category } from '../types'
+import ArtSpin from '../components/ArtSpin'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
 
@@ -59,9 +59,7 @@ export default function AssetEdit() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   if (error || !asset) return <Result status="404" title={error || '资产不存在'} />

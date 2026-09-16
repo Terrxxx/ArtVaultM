@@ -5,7 +5,7 @@ from ..database import get_db
 from ..models import Folder, User
 from ..schemas import FolderCreate, FolderUpdate
 from ..serializers import folder_to_dict
-from ..services import trash
+from ..services import badges, trash
 from ..services.folders import collect_subtree, subtree_counts
 from ..services.permissions import can_delete_folder
 from .deps import ensure_project_access, get_current_user
@@ -36,7 +36,7 @@ def create_folder(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ensure_project_access(db, project_id, user, write=True)
+    project = ensure_project_access(db, project_id, user, write=True)
     if payload.parent_id is not None:
         parent = db.get(Folder, payload.parent_id)
         if parent is None or parent.project_id != project_id:
@@ -48,9 +48,13 @@ def create_folder(
         sort_order=payload.sort_order,
     )
     db.add(folder)
+    # 「归类强迫症」按项目所有者统计，文件夹可能是成员建的
+    new_badges = badges.sync_many(db, project.owner_id, user.id)
     db.commit()
     db.refresh(folder)
-    return folder_to_dict(folder, user)
+    data = folder_to_dict(folder, user)
+    data["new_badges"] = new_badges.get(user.id, [])
+    return data
 
 
 @router.patch("/folders/{folder_id}")

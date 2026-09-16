@@ -102,8 +102,13 @@ body.av-wide .av-content {
   max-width: 1200px;
 }
 
+/* 侧栏在网格里自己找位置；用在 flex 页面（项目详情）时 grid-* 会被忽略、flex-basis 生效 */
 .av-rail-left {
+  grid-column: 1;
+  justify-self: end;
   flex: 0 0 260px;
+  width: 260px;
+  max-width: 100%;
 }
 
 /* 侧栏不做卡片底，内容直接浮在页面底色上；热力图随之去掉自带的深色底 */
@@ -158,6 +163,7 @@ body.av-wide .av-content {
   }
 
   .av-rail-comments,
+  .av-rail-left,
   .av-rail-right {
     grid-column: 1;
     justify-self: center;
@@ -171,5 +177,38 @@ body.av-wide .av-content {
   .av-side-main {
     flex: 1 1 100%;
     order: -1;
+  }
+}
+
+/* 隐藏成就的「隐藏」标：文字跟着渐变流光转，用来区别于普通成就 */
+.av-shine {
+  background-image: linear-gradient(
+    90deg,
+    #ff5f6d,
+    #ffc371,
+    #47e891,
+    #4facfe,
+    #b06ab3,
+    #ff5f6d
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: av-shine-flow 4s linear infinite;
+}
+
+@keyframes av-shine-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av-shine {
+    animation: none;
   }
 }

@@ -373,7 +373,7 @@ export default function CommentSection({ assetId, versions }: Props) {
 
       {roots.length === 0 ? (
         <Empty
-          description={filterVersion === ALL ? '暂无评论' : '该版本暂无评论'}
+          description={filterVersion === ALL ? '还没有人说话，抢个沙发？' : '这个版本还没人评论'}
           image={Empty.PRESENTED_IMAGE_SIMPLE}
         />
       ) : (

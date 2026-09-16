@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import {
   Avatar,
@@ -13,7 +13,6 @@ import {
   Result,
   Row,
   Space,
-  Spin,
   Tag,
   Typography,
 } from 'antd'
@@ -29,6 +28,7 @@ import {
   HomeOutlined,
   MoreOutlined,
   PlusOutlined,
+  DownloadOutlined,
   SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons'
@@ -40,9 +40,20 @@ import Heatmap, { RECENT } from '../components/Heatmap'
 import Leaderboard from '../components/Leaderboard'
 import TrashDrawer from '../components/TrashDrawer'
 import UploadAssetModal from '../components/UploadAssetModal'
+import ArtSpin from '../components/ArtSpin'
 
 // 资产列表一页多少个；资产多时只渲染这一页，其余的按需加载
 const ASSET_PAGE = 48
+
+// 空状态随机挑一句，免得每个空文件夹都念叨同一句
+const EMPTY_LINES = [
+  '这个文件夹比画师的硬盘还空',
+  '这个项目还空着，传点什么进来吧',
+  '空空如也，连草稿都没留一张',
+  '这里静得能听见笔刷落地的声音',
+  '干净得像刚格式化完',
+  '一个文件都没有，先扔点什么进来？',
+]
 
 function ProjectDetailView({ project: initial }: { project: Project }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -54,6 +65,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   // 当前所在文件夹：0 = 项目根目录。初值取自 ?folder=，从资产页返回时才能落回原目录
   const [folderId, setFolderId] = useState(() => Number(searchParams.get('folder')) || 0)
   const [q, setQ] = useState('')
+  // 每换一个文件夹重新挑一句；同一次停留里不变，免得重渲染时闪
+  const emptyText = useMemo(
+    () => EMPTY_LINES[Math.floor(Math.random() * EMPTY_LINES.length)],
+    [folderId, q],
+  )
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
@@ -178,6 +194,19 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     if (!c) break
     chain.unshift(c)
     cursor = c.parent_id || 0
+  }
+
+  // 打包下载当前目录（含子文件夹）里的全部资产；交给浏览器原生下载
+  const downloadZip = async () => {
+    const hide = message.loading('正在打包，资产多时需要等一会儿…', 0)
+    try {
+      const { token, url } = await api.zipToken(project.id, folderId)
+      window.location.href = `${url}&t=${token}`
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '打包失败')
+    } finally {
+      window.setTimeout(hide, 1500)
+    }
   }
 
   const loadMore = async () => {
@@ -380,7 +409,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             days={rankDays}
             onDaysChange={setRankDays}
             loading={rankLoading}
-            emptyText="这段时间还没有贡献"
+            emptyText="这段时间还没有贡献，第一个上？"
           />
         </div>
 
@@ -466,6 +495,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               回收站
             </Button>
           )}
+          <Button icon={<DownloadOutlined />} onClick={downloadZip}>
+            打包下载
+          </Button>
         </Space>
 
         {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
@@ -485,12 +517,10 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <Spin />
-          </div>
+          <ArtSpin padding={60} />
         ) : childFolders.length === 0 && assets.length === 0 ? (
           <Empty
-            description={q ? '没有匹配的资产' : folderId === 0 ? '暂无内容' : '此文件夹为空'}
+            description={q ? '没搜到，换个关键词试试' : emptyText}
             style={{ marginTop: 60 }}
           />
         ) : (
@@ -783,9 +813,7 @@ export default function ProjectDetail() {
   if (error) return <Result status="404" title={error} />
   if (!project) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   return <ProjectDetailView project={project} />
@@ -813,9 +841,7 @@ export function ProjectDetailBySlug() {
   if (error) return <Result status="404" title={error} />
   if (!project) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   return <ProjectDetailView project={project} />

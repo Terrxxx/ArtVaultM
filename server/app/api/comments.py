@@ -8,7 +8,7 @@ from ..database import get_db
 from ..models import Asset, Comment, User
 from ..schemas import CommentCreate
 from ..serializers import user_brief
-from ..services import notify
+from ..services import badges, notify
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
@@ -120,9 +120,16 @@ def add_comment(
     for sub_user_id in notify.subscriber_ids(db, "asset", asset_id):
         _notify(sub_user_id, "comment", f"你订阅的「{asset.name}」有新评论：{payload.content[:120]}")
 
+    # 5) 评论者 / 资产作者 / 被回复者：评论数变化可能解锁成就
+    new_badges = badges.sync_many(
+        db, user.id, asset.created_by, parent.user_id if parent else None
+    )
+
     db.commit()
     db.refresh(comment)
-    return comment_to_dict(comment)
+    data = comment_to_dict(comment)
+    data["new_badges"] = new_badges.get(user.id, [])
+    return data
 
 
 @router.delete("/comments/{comment_id}")

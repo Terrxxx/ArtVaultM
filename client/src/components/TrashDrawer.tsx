@@ -4,6 +4,7 @@ import { DeleteOutlined, FileOutlined, UndoOutlined } from '@ant-design/icons'
 import { api, userPath } from '../api'
 import type { TrashItem } from '../types'
 import { Link } from 'react-router-dom'
+import ArtSpin from './ArtSpin'
 
 interface Props {
   open: boolean
@@ -74,11 +75,9 @@ export default function TrashDrawer({ open, projectId, onClose, onChanged }: Pro
       </Typography.Text>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin />
-        </div>
+        <ArtSpin padding={40} />
       ) : items.length === 0 ? (
-        <Empty description="回收站是空的" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty description="回收站是空的，说明手很稳" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
         <List
           dataSource={items}

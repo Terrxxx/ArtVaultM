@@ -32,7 +32,7 @@ export default function Leaderboard({
   onDaysChange,
   loading,
   limit = 8,
-  emptyText = '这段时间还没有更新',
+  emptyText = '这段时间大家都摸鱼去了',
 }: Props) {
   const navigate = useNavigate()
   const shown = items.slice(0, limit)

@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict, user_brief
-from ..services import chunked_upload, notify, storage, storage_config, trash
+from ..services import badges, chunked_upload, notify, storage, storage_config, trash
 from ..services.permissions import can_delete_asset, can_manage_trash, can_move_asset
 from .deps import ensure_project_access, get_current_user
 
@@ -264,10 +264,13 @@ def create_asset(
         asset_id=asset.id,
     )
 
+    new_badges = badges.sync(db, user.id)
+
     db.commit()
     db.refresh(asset)
     data = asset_to_dict(asset, include_versions=True, viewer=user)
     data["deduped"] = deduped
+    data["new_badges"] = new_badges
     return data
 
 
@@ -334,9 +337,14 @@ def update_asset(
             asset.small_thumbnail = cover["small"]["path"]
             asset.small_thumbnail_storage = cover["small"]["storage"]
 
+    # 描述 / 标签 / 封面都能推进成就，给编辑者记一次
+    new_badges = badges.sync(db, user.id)
+
     db.commit()
     db.refresh(asset)
-    return asset_to_dict(asset, include_versions=True, viewer=user)
+    data = asset_to_dict(asset, include_versions=True, viewer=user)
+    data["new_badges"] = new_badges
+    return data
 
 
 @router.patch("/assets/{asset_id}/folder")

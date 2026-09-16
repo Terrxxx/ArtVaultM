@@ -12,7 +12,6 @@ import {
   Result,
   Select,
   Space,
-  Spin,
   Switch,
   Tabs,
   Tag,
@@ -28,6 +27,7 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, projectPath, userPath } from '../api'
 import type { Category, Project, ProjectMember, UserBrief } from '../types'
+import ArtSpin from '../components/ArtSpin'
 
 export default function ProjectEdit() {
   const { id } = useParams()
@@ -67,9 +67,7 @@ export default function ProjectEdit() {
   // 只有首次加载才铺满整页转圈；分类/成员操作后的刷新不再把整个页面拆掉重画
   if (loading && !project) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   if (error || !project) return <Result status="404" title={error || '项目不存在'} />
@@ -272,7 +270,7 @@ function CategoryManager({
       </Space>
       <List
         dataSource={categories}
-        locale={{ emptyText: <Empty description="暂无分类" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+        locale={{ emptyText: <Empty description="还没有资产类型，加几个吧" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         renderItem={(c) => (
           <List.Item
             actions={[

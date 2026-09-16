@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Avatar, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
+import { Avatar, Card, Col, Empty, Pagination, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
@@ -7,6 +7,10 @@ import type { ActivityResponse, UpdateItem, UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
 import UpdateLog from '../components/UpdateLog'
+import ArtSpin from '../components/ArtSpin'
+
+// 成就一页放几个；成就多了左栏会很长，所以做成分页
+const BADGES_PER_PAGE = 8
 
 export default function UserProfilePage() {
   // 路由为 /{用户名}
@@ -21,6 +25,8 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true)
   const [loadingUpdates, setLoadingUpdates] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // 成就栏一页 8 个，从第一页开始
+  const [badgePage, setBadgePage] = useState(1)
 
   // 资料 + 热力图
   useEffect(() => {
@@ -35,6 +41,7 @@ export default function UserProfilePage() {
         if (!alive) return
         setProfile(p)
         setActivity(act)
+        setBadgePage(1)
       })
       .catch((e) => {
         if (alive) setError(e.response?.data?.detail || '用户不存在')
@@ -72,19 +79,89 @@ export default function UserProfilePage() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <ArtSpin />
     )
   }
   if (error || !profile) {
     return <Empty description={error || '用户不存在'} style={{ marginTop: 80 }} />
   }
 
-  const { user, stats, projects } = profile
+  const { user, stats, projects, badges } = profile
+
+  // 成就分页：一页 8 个，页码越界时收敛回最后一页
+  const badgePages = Math.max(1, Math.ceil(badges.length / BADGES_PER_PAGE))
+  const currentPage = Math.min(badgePage, badgePages)
+  const pageBadges = badges.slice(
+    (currentPage - 1) * BADGES_PER_PAGE,
+    currentPage * BADGES_PER_PAGE,
+  )
 
   return (
     <div className="av-center-layout">
+      {/* 左栏：成就（不做卡片底，直接浮在页面底色上） */}
+      <div className="av-rail-left av-rail-plain">
+        <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+          成就
+        </Typography.Title>
+        {/* 窄屏时左栏会占满整行，这里跟着铺成多列；260px 的侧栏里只有一列 */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: 10,
+          }}
+        >
+          {pageBadges.map((b) => (
+            <div
+              key={b.key}
+              title={b.desc}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--av-border)',
+                background: b.unlocked ? 'var(--av-accent-bg)' : undefined,
+                opacity: b.unlocked ? 1 : 0.5,
+              }}
+            >
+              <span style={{ fontSize: 22, filter: b.unlocked ? undefined : 'grayscale(1)' }}>
+                {b.icon}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <Typography.Text strong={b.unlocked} style={{ fontSize: 13, display: 'block' }}>
+                  {b.name}
+                  {/* 隐藏成就解锁前后端不会返回，这里标一下让玩家知道自己挖到了彩蛋 */}
+                  {b.hidden && (
+                    <span className="av-shine" style={{ fontSize: 11, marginLeft: 6, fontWeight: 400 }}>
+                      隐藏
+                    </span>
+                  )}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {b.unlocked
+                    ? b.unlocked_at
+                      ? `解锁于 ${new Date(b.unlocked_at).toLocaleDateString()}`
+                      : '已解锁'
+                    : `${b.desc}（${b.value}/${b.target}）`}
+                </Typography.Text>
+              </div>
+            </div>
+          ))}
+        </div>
+        {badgePages > 1 && (
+          <Pagination
+            simple
+            current={currentPage}
+            pageSize={BADGES_PER_PAGE}
+            total={badges.length}
+            onChange={setBadgePage}
+            style={{ marginTop: 12, justifyContent: 'center' }}
+          />
+        )}
+      </div>
+
       {/* 主内容 */}
       <div className="av-center-main">
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
@@ -123,7 +200,7 @@ export default function UserProfilePage() {
           </Card>
 
           {projects.length === 0 ? (
-            <Empty description="该用户还没有上传过资产（或你没有查看权限）" style={{ marginTop: 40 }} />
+            <Empty description="这里还没有资产——要么还没传，要么是私有项目你看不到" style={{ marginTop: 40 }} />
           ) : (
             projects.map((p, idx) =>
               p.restricted ? (

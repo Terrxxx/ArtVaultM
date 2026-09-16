@@ -180,6 +180,7 @@ export interface DownloadStats {
 export interface UserProfile {
   user: UserBrief
   stats: { asset_count: number; project_count: number; version_count: number }
+  badges: Badge[]
   projects: {
     project_id: number | null
     project_name: string | null
@@ -225,6 +226,24 @@ export interface UpdateItem {
   project_id?: number | null
   project_name?: string | null
   uploader?: UserBrief | null
+}
+
+/** 成就徽章：由后端按已有的上传/点赞/下载数据推导 */
+export interface Badge {
+  key: string
+  name: string
+  /** 直接展示的 emoji */
+  icon: string
+  /** 达成条件文案 */
+  desc: string
+  target: number
+  /** 当前进度（未解锁时展示 value/target） */
+  value: number
+  unlocked: boolean
+  /** 隐藏成就：解锁前不会出现在列表里 */
+  hidden?: boolean
+  /** 解锁时间；未解锁为 null */
+  unlocked_at?: string | null
 }
 
 /**
