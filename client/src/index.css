@@ -19,11 +19,12 @@
   --av-unread-bg: #f6f5ff;
   --av-heat-canvas: transparent;
   --av-heat-border: rgba(27, 31, 35, 0.06);
+  /* GitHub 浅色贡献图色阶 */
   --av-heat-0: #ebedf0;
-  --av-heat-1: #d9d5f5;
-  --av-heat-2: #b3a8ea;
-  --av-heat-3: #8a79dd;
-  --av-heat-4: #6c5ce7;
+  --av-heat-1: #9be9a8;
+  --av-heat-2: #40c463;
+  --av-heat-3: #30a14e;
+  --av-heat-4: #216e39;
 }
 
 /* 暗色 = GitHub 深色模式调色板（canvas / border / fg / accent 取其官方值） */
@@ -42,10 +43,10 @@
   --av-folder-bg: #bb800926;
   --av-folder-fg: #d29922;
   --av-unread-bg: #1f6feb1a;
-  /* 图区底与卡片同色（#161b22），空格子用更深的 #0d1117，格子之间露出的就是卡片底色 */
-  --av-heat-canvas: #161b22;
+  /* 和 github.com 深色贡献图一致：图区底 #0d1117、空格子 #161b22、绿色阶如下来源 */
+  --av-heat-canvas: #0d1117;
   --av-heat-border: rgba(240, 246, 252, 0.06);
-  --av-heat-0: #0d1117;
+  --av-heat-0: #161b22;
   --av-heat-1: #0e4429;
   --av-heat-2: #006d32;
   --av-heat-3: #26a641;
