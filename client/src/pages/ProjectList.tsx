@@ -129,7 +129,7 @@ export default function ProjectList() {
                   src={p.owner.avatar_url || undefined}
                 />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  创建者 {p.owner.nickname || p.owner.username}
+                  {p.owner.nickname || p.owner.username}
                 </Typography.Text>
               </Space>
             </Link>

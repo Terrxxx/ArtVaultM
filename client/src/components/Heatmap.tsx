@@ -123,7 +123,11 @@ export default function Heatmap({
                     height: CELL,
                     borderRadius: 2,
                     background: c.future || !c.inRange ? 'transparent' : COLORS[level(c.count)],
-                    outline: selected ? '2px solid var(--av-primary)' : 'none',
+                    outline: selected
+                      ? '2px solid var(--av-primary)'
+                      : c.future || !c.inRange
+                        ? 'none'
+                        : '1px solid var(--av-heat-border)',
                     outlineOffset: 1,
                     cursor: c.inRange ? 'pointer' : 'default',
                   }}

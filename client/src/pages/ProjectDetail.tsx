@@ -365,7 +365,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                   src={project.owner.avatar_url || undefined}
                 />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  创建者 {project.owner.nickname || project.owner.username}
+                  {project.owner.nickname || project.owner.username}
                 </Typography.Text>
               </Space>
             </Link>

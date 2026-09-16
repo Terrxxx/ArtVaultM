@@ -42,9 +42,8 @@ import UploadVersionModal from '../components/UploadVersionModal'
 import { isSuperAdmin } from '../types'
 import { useAuthStore } from '../store'
 
-// 版本历史默认展示的条数，容器高度按这个条数固定
+// 版本历史默认展示的条数
 const VERSION_PREVIEW = 4
-const VERSION_ITEM_HEIGHT = 92
 
 export default function AssetDetail() {
   const { id } = useParams()
@@ -301,135 +300,127 @@ export default function AssetDetail() {
             )
           }
         >
-          {/* 容器高度固定为约 4 条，超出部分滚动 */}
-          <div
-            style={{
-              maxHeight: VERSION_PREVIEW * VERSION_ITEM_HEIGHT,
-              overflowY: versions.length > VERSION_PREVIEW ? 'auto' : 'visible',
-              paddingRight: versions.length > VERSION_PREVIEW ? 8 : 0,
-            }}
-          >
-            <List
-              dataSource={visibleVersions}
-              renderItem={(v: Version) => {
-                const rowThumb = rowThumbOf(v)
-                return (
-                <List.Item
-                  actions={[
-                    <Button
-                      key="pv"
-                      icon={<EyeOutlined />}
-                      onClick={() => setPreviewTarget(v)}
-                    >
-                      预览
-                    </Button>,
-                    <Button
-                      key="dl"
-                      icon={<DownloadOutlined />}
-                      onClick={() => downloadVersion(v.id, v.file_name)}
-                    >
-                      下载
-                    </Button>,
-                    canWrite && (
-                      <Dropdown
-                        key="more"
-                        trigger={['click']}
-                        menu={{
-                          items: [
-                            {
-                              key: 'changelog',
-                              icon: <EditOutlined />,
-                              label: '修改说明',
-                            },
-                            { key: 'replace', icon: <SwapOutlined />, label: '换源' },
-                            {
-                              key: 'delete',
-                              icon: <DeleteOutlined />,
-                              label: v.is_latest ? '删除此版本（最新版本不能删）' : '删除此版本',
-                              danger: true,
-                              disabled: !!v.is_latest,
-                            },
-                          ],
-                          onClick: ({ key }) => {
-                            if (key === 'changelog') {
-                              setChangelogTarget(v)
-                              setChangelogText(v.changelog || '')
-                            } else if (key === 'replace') {
-                              setReplaceTarget(v)
-                              setReplaceFile([])
-                              setReplaceChangelog('')
-                            } else if (key === 'delete') {
-                              setDeleteTarget(v)
-                            }
+          {/* 只渲染前 N 条，不做内部滚动，避免固定高度把最后一条截成半行 */}
+          <List
+            dataSource={visibleVersions}
+            renderItem={(v: Version) => {
+              const rowThumb = rowThumbOf(v)
+              return (
+              <List.Item
+                actions={[
+                  <Button
+                    key="pv"
+                    icon={<EyeOutlined />}
+                    onClick={() => setPreviewTarget(v)}
+                  >
+                    预览
+                  </Button>,
+                  <Button
+                    key="dl"
+                    icon={<DownloadOutlined />}
+                    onClick={() => downloadVersion(v.id, v.file_name)}
+                  >
+                    下载
+                  </Button>,
+                  canWrite && (
+                    <Dropdown
+                      key="more"
+                      trigger={['click']}
+                      menu={{
+                        items: [
+                          {
+                            key: 'changelog',
+                            icon: <EditOutlined />,
+                            label: '修改说明',
                           },
+                          { key: 'replace', icon: <SwapOutlined />, label: '换源' },
+                          {
+                            key: 'delete',
+                            icon: <DeleteOutlined />,
+                            label: v.is_latest ? '删除此版本（最新版本不能删）' : '删除此版本',
+                            danger: true,
+                            disabled: !!v.is_latest,
+                          },
+                        ],
+                        onClick: ({ key }) => {
+                          if (key === 'changelog') {
+                            setChangelogTarget(v)
+                            setChangelogText(v.changelog || '')
+                          } else if (key === 'replace') {
+                            setReplaceTarget(v)
+                            setReplaceFile([])
+                            setReplaceChangelog('')
+                          } else if (key === 'delete') {
+                            setDeleteTarget(v)
+                          }
+                        },
+                      }}
+                    >
+                      <Button icon={<MoreOutlined />} />
+                    </Dropdown>
+                  ),
+                ]}
+              >
+                <List.Item.Meta
+                  avatar={
+                    rowThumb ? (
+                      <img
+                        src={rowThumb}
+                        alt={asset.name}
+                        style={{
+                          width: 42,
+                          height: 42,
+                          objectFit: 'cover',
+                          borderRadius: 4,
+                          border: '1px solid var(--av-border)',
                         }}
-                      >
-                        <Button icon={<MoreOutlined />} />
-                      </Dropdown>
-                    ),
-                  ]}
-                >
-                  <List.Item.Meta
-                    avatar={
-                      rowThumb ? (
-                        <img
-                          src={rowThumb}
-                          alt={asset.name}
-                          style={{
-                            width: 42,
-                            height: 42,
-                            objectFit: 'cover',
-                            borderRadius: 4,
-                            border: '1px solid var(--av-border)',
-                          }}
-                        />
-                      ) : undefined
-                    }
-                    title={
-                      <Space wrap>
-                        {v.is_latest && <Tag color="green">最新</Tag>}
-                        <Typography.Text strong>v{v.version}</Typography.Text>
-                        {v.file_format && <Tag>{v.file_format}</Tag>}
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          下载 {v.download_count} 次
-                        </Typography.Text>
-                      </Space>
-                    }
-                    description={
-                      <Space direction="vertical" size={2}>
-                        <Typography.Text type="secondary">
-                          {v.file_name} · {formatSize(v.file_size)}
-                        </Typography.Text>
-                        {v.changelog && (
-                          <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
+                      />
+                    ) : undefined
+                  }
+                  title={
+                    <Space wrap>
+                      {v.is_latest && <Tag color="green">最新</Tag>}
+                      <Typography.Text strong>v{v.version}</Typography.Text>
+                      {v.file_format && <Tag>{v.file_format}</Tag>}
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        下载 {v.download_count} 次
+                      </Typography.Text>
+                    </Space>
+                  }
+                  description={
+                    <Space direction="vertical" size={2}>
+                      <Typography.Text type="secondary">
+                        {v.file_name} · {formatSize(v.file_size)}
+                      </Typography.Text>
+                      {v.changelog && (
+                        <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
+                      )}
+                      <Space size={6} align="center" style={{ fontSize: 12 }}>
+                        {v.uploader ? (
+                          <Link to={userPath(v.uploader)}>
+                            <Space size={6} align="center">
+                              <Avatar
+                                size={18}
+                                icon={<UserOutlined />}
+                                src={v.uploader.avatar_url || undefined}
+                              />
+                              {v.uploader.nickname || v.uploader.username}
+                            </Space>
+                          </Link>
+                        ) : (
+                          <Typography.Text type="secondary">未知</Typography.Text>
                         )}
-                        <Space size={6} align="center" style={{ fontSize: 12 }}>
-                          {v.uploader ? (
-                            <Link to={userPath(v.uploader)}>
-                              <Space size={6} align="center">
-                                <Avatar
-                                  size={18}
-                                  icon={<UserOutlined />}
-                                  src={v.uploader.avatar_url || undefined}
-                                />
-                                {v.uploader.nickname || v.uploader.username}
-                              </Space>
-                            </Link>
-                          ) : (
-                            <Typography.Text type="secondary">未知</Typography.Text>
-                          )}
-                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
-                          </Typography.Text>
-                        </Space>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
+                        </Typography.Text>
                       </Space>
-                    }
-                  />
-                </List.Item>
-                )
-              }}
-            />
-          </div>
+                    </Space>
+                  }
+                />
+              </List.Item>
+              )
+            }}
+          />
         </Card>
 
         <Card title="评论">

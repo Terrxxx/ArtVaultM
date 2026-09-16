@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Avatar, Button, Empty, Input, List, Popconfirm, Select, Space, Tag, Typography, message } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
 import { api } from '../api'
@@ -37,11 +37,13 @@ function MentionInput({
   onChange,
   rows = 3,
   placeholder,
+  versions,
 }: {
   value: string
   onChange: (v: string) => void
   rows?: number
   placeholder?: string
+  versions: Version[]
 }) {
   const [options, setOptions] = useState<UserBrief[]>([])
   const [query, setQuery] = useState<string | null>(null)
@@ -52,6 +54,13 @@ function MentionInput({
     const m = val.match(/@([^\s@]*)$/)
     setQuery(m ? m[1] : null)
   }
+
+  // 输入 @v 时列出可选版本，和 @用户 一样给联想
+  const versionOptions = useMemo(() => {
+    if (query === null || !query.toLowerCase().startsWith('v')) return []
+    const q = query.toLowerCase()
+    return versions.filter((v) => `v${v.version}`.startsWith(q))
+  }, [query, versions])
 
   useEffect(() => {
     if (query === null) {
@@ -69,12 +78,26 @@ function MentionInput({
     return () => window.clearTimeout(timer.current)
   }, [query])
 
-  const insert = (u: UserBrief) => {
-    const label = u.nickname || u.username
-    onChange(value.replace(/@([^\s@]*)$/, `@${label} `))
+  const closeSuggest = () => {
     setQuery(null)
     setOptions([])
   }
+
+  const insert = (u: UserBrief) => {
+    const label = u.nickname || u.username
+    onChange(value.replace(/@([^\s@]*)$/, `@${label} `))
+    closeSuggest()
+  }
+
+  const insertVersion = (v: Version) => {
+    onChange(value.replace(/@([^\s@]*)$/, `@v${v.version} `))
+    closeSuggest()
+  }
+
+  const suggestions = [
+    ...versionOptions.map((v) => ({ kind: 'version' as const, v })),
+    ...options.map((u) => ({ kind: 'user' as const, u })),
+  ]
 
   return (
     <div>
@@ -84,22 +107,39 @@ function MentionInput({
         onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
       />
-      {query !== null && options.length > 0 && (
+      {suggestions.length > 0 && (
         <List
           size="small"
           style={{ marginTop: 6, border: '1px solid var(--av-border)', borderRadius: 4, maxHeight: 180, overflow: 'auto' }}
-          dataSource={options}
-          renderItem={(u) => (
-            <List.Item style={{ cursor: 'pointer', padding: '6px 10px' }} onClick={() => insert(u)}>
-              <Space>
-                <Avatar size="small" icon={<UserOutlined />} src={u.avatar_url || undefined} />
-                {u.nickname || u.username}
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  @{u.username}
-                </Typography.Text>
-              </Space>
-            </List.Item>
-          )}
+          dataSource={suggestions}
+          renderItem={(item) =>
+            item.kind === 'version' ? (
+              <List.Item
+                style={{ cursor: 'pointer', padding: '6px 10px' }}
+                onClick={() => insertVersion(item.v)}
+              >
+                <Space>
+                  <Tag color="blue">v{item.v.version}</Tag>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {item.v.changelog || item.v.file_name}
+                  </Typography.Text>
+                </Space>
+              </List.Item>
+            ) : (
+              <List.Item
+                style={{ cursor: 'pointer', padding: '6px 10px' }}
+                onClick={() => insert(item.u)}
+              >
+                <Space>
+                  <Avatar size="small" icon={<UserOutlined />} src={item.u.avatar_url || undefined} />
+                  {item.u.nickname || item.u.username}
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    @{item.u.username}
+                  </Typography.Text>
+                </Space>
+              </List.Item>
+            )
+          }
         />
       )}
     </div>
@@ -224,7 +264,13 @@ export default function CommentSection({ assetId, versions }: Props) {
                 ))}
                 {replyTo === c.id && (
                   <div style={{ marginTop: 8 }}>
-                    <MentionInput value={replyContent} onChange={setReplyContent} rows={2} placeholder="回复…" />
+                    <MentionInput
+                      value={replyContent}
+                      onChange={setReplyContent}
+                      rows={2}
+                      placeholder="回复…"
+                      versions={versions}
+                    />
                     <Space style={{ marginTop: 6 }}>
                       <Button size="small" type="primary" loading={submitting} onClick={() => submit(c.id)}>
                         回复
@@ -258,6 +304,7 @@ export default function CommentSection({ assetId, versions }: Props) {
           value={content}
           onChange={setContent}
           placeholder="写下你的评论…  用 @v1 指向具体版本"
+          versions={versions}
         />
         <Space style={{ marginTop: 8 }} wrap>
           <Button type="primary" loading={submitting} onClick={() => submit()}>
