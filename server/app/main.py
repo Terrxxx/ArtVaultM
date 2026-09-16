@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateTable
 
 from .api import (
     admin,
@@ -25,7 +26,7 @@ from .api import (
 from .config import settings
 from .core.security import hash_password
 from .database import Base, SessionLocal, engine
-from .models import Project, User
+from .models import Asset, Project, User
 from .services import storage_config
 from .services.slug import slugify
 
@@ -42,6 +43,9 @@ WANTED_COLUMNS = {
     },
     "project_members": {
         "status": "VARCHAR DEFAULT 'pending'",
+    },
+    "categories": {
+        "parent_id": "INTEGER REFERENCES categories(id)",
     },
     "assets": {
         "cover_thumbnail_storage": "VARCHAR DEFAULT 'local'",
@@ -75,6 +79,46 @@ def ensure_columns() -> None:
         with engine.begin() as conn:
             for name, ddl in missing.items():
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+
+
+def migrate_asset_category_nullable() -> None:
+    """SQLite 无法直接改列的可空性，重建 assets 表让 category_id 可空（根目录资产为 NULL）。"""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    inspector = inspect(engine)
+    if not inspector.has_table("assets"):
+        return
+    cat_col = next(
+        (c for c in inspector.get_columns("assets") if c["name"] == "category_id"),
+        None,
+    )
+    if cat_col is None or cat_col.get("nullable"):
+        return
+
+    # 重建前先备份数据库文件，失败时可手动恢复
+    import shutil
+
+    db_file = settings.database_url[len("sqlite:///") :]
+    if os.path.exists(db_file):
+        shutil.copy2(db_file, f"{db_file}.bak")
+
+    cols = [c["name"] for c in inspector.get_columns("assets")]
+    col_list = ", ".join(cols)
+    ddl = str(CreateTable(Asset.__table__).compile(engine))
+
+    raw = engine.raw_connection()
+    try:
+        cur = raw.cursor()
+        cur.execute("PRAGMA foreign_keys=OFF")
+        cur.execute("ALTER TABLE assets RENAME TO assets_backup")
+        cur.execute(ddl)
+        cur.execute(
+            f"INSERT INTO assets ({col_list}) SELECT {col_list} FROM assets_backup"
+        )
+        cur.execute("DROP TABLE assets_backup")
+        raw.commit()
+    finally:
+        raw.close()
 
 
 def backfill_slugs() -> None:
@@ -144,6 +188,7 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.upload_dir, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     ensure_columns()
+    migrate_asset_category_nullable()
     backfill_slugs()
     seed_admin()
     # 把对象存储配置载入进程内缓存，供序列化器生成图片 URL

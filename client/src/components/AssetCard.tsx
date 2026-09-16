@@ -1,25 +1,29 @@
-import { Button, Card, Dropdown, Space, Tag, Typography } from 'antd'
-import { FileOutlined, FolderOutlined, LikeOutlined } from '@ant-design/icons'
+import type { DragEvent } from 'react'
+import { Card, Space, Tag, Typography } from 'antd'
+import { FileOutlined, LikeOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { assetPath } from '../api'
-import type { Asset, Category } from '../types'
+import type { Asset } from '../types'
 
 interface Props {
   asset: Asset
-  /** 传入文件夹列表与回调后，展示「移动到文件夹」菜单 */
-  categories?: Category[]
-  onMove?: (assetId: number, categoryId: number) => void
+  /** 可拖拽时由调用方在 onDragStart 里写入 dataTransfer 数据 */
+  draggable?: boolean
+  onDragStart?: (e: DragEvent<HTMLDivElement>, asset: Asset) => void
+  onDragEnd?: () => void
 }
 
-export default function AssetCard({ asset, categories, onMove }: Props) {
+export default function AssetCard({ asset, draggable = false, onDragStart, onDragEnd }: Props) {
   const cover = asset.cover_thumbnail_url || null
-  // 有回调、且存在其它可选文件夹时才展示移动入口
-  const movable =
-    !!onMove && !!categories?.some((c) => c.id !== asset.category_id)
 
   return (
-    <div style={{ position: 'relative', height: '100%' }}>
-      <Link to={assetPath(asset)}>
+    <div
+      style={{ height: '100%' }}
+      draggable={draggable}
+      onDragStart={onDragStart ? (e) => onDragStart(e, asset) : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
+    >
+      <Link to={assetPath(asset)} draggable={false}>
         <Card
           hoverable
           styles={{ body: { padding: 12 } }}
@@ -35,7 +39,12 @@ export default function AssetCard({ asset, categories, onMove }: Props) {
                   justifyContent: 'center',
                 }}
               >
-                <img src={cover} alt={asset.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img
+                  src={cover}
+                  alt={asset.name}
+                  draggable={false}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               </div>
             ) : (
               <div
@@ -72,30 +81,6 @@ export default function AssetCard({ asset, categories, onMove }: Props) {
           </Space>
         </Card>
       </Link>
-
-      {movable && (
-        <Dropdown
-          trigger={['click']}
-          menu={{
-            items: (categories || [])
-              .filter((c) => c.id !== asset.category_id)
-              .map((c) => ({ key: String(c.id), label: c.name })),
-            onClick: ({ key, domEvent }) => {
-              domEvent.stopPropagation()
-              onMove?.(asset.id, Number(key))
-            },
-          }}
-        >
-          <Button
-            size="small"
-            icon={<FolderOutlined />}
-            style={{ position: 'absolute', top: 8, right: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.18)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            移动
-          </Button>
-        </Dropdown>
-      )}
     </div>
   )
 }

@@ -107,6 +107,7 @@ def category_to_dict(c: Category) -> dict:
     return {
         "id": c.id,
         "project_id": c.project_id,
+        "parent_id": c.parent_id,
         "name": c.name,
         "sort_order": c.sort_order,
         "is_system": c.is_system,

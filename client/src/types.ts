@@ -38,6 +38,7 @@ export interface Version {
 export interface Category {
   id: number
   project_id: number
+  parent_id?: number | null
   name: string
   sort_order: number
   is_system: boolean
@@ -47,7 +48,7 @@ export interface Category {
 export interface Asset {
   id: number
   project_id: number
-  category_id: number
+  category_id: number | null
   name: string
   description?: string | null
   tags: string[]

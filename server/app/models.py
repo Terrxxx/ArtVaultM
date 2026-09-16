@@ -80,11 +80,17 @@ class Category(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    # 父文件夹（自引用），NULL 表示顶层文件夹；用于 Windows 资源管理器式层级
+    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     name = Column(String, nullable=False)
     sort_order = Column(Integer, default=0)
     is_system = Column(Boolean, default=False)
 
     project = relationship("Project", back_populates="categories")
+    parent = relationship("Category", remote_side=[id], back_populates="children")
+    children = relationship(
+        "Category", back_populates="parent", cascade="all, delete-orphan"
+    )
     assets = relationship("Asset", back_populates="category")
 
 
@@ -93,7 +99,8 @@ class Asset(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    # NULL 表示资产位于项目根目录（对应 Windows 资源管理器的盘符根目录）
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     tags = Column(JSON, default=list)

@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import {
   Avatar,
   Button,
   Card,
   Col,
   Drawer,
+  Dropdown,
   Empty,
   Input,
   message,
   Modal,
   Result,
   Row,
-  Select,
   Space,
   Spin,
   Tag,
@@ -21,9 +22,15 @@ import {
   ArrowLeftOutlined,
   BarChartOutlined,
   BellOutlined,
+  DeleteOutlined,
   EditOutlined,
+  FileOutlined,
   FolderAddOutlined,
+  FolderOpenOutlined,
+  FolderOutlined,
   GithubOutlined,
+  HomeOutlined,
+  MoreOutlined,
   PlusOutlined,
   SearchOutlined,
   UserOutlined,
@@ -41,7 +48,8 @@ import { useAuthStore } from '../store'
 function ProjectDetailView({ project: initial }: { project: Project }) {
   const [project, setProject] = useState(initial)
   const [assets, setAssets] = useState<Asset[]>([])
-  const [categoryId, setCategoryId] = useState<number | undefined>()
+  // 当前所在文件夹：0 = 项目根目录
+  const [folderId, setFolderId] = useState(0)
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -55,6 +63,16 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [folderOpen, setFolderOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [folderSubmitting, setFolderSubmitting] = useState(false)
+  // 拖拽悬停中的文件夹（含面包屑，0 = 根目录），用于高亮提示
+  const [overFolder, setOverFolder] = useState<number | null>(null)
+  // 正在拖拽的卡片，用来把它本身调成半透明
+  const [draggingKey, setDraggingKey] = useState<string | null>(null)
+  // 拖拽时跟随光标的图标（离屏渲染，交给 setDragImage）
+  const dragIconRef = useRef<HTMLDivElement>(null)
+  // 删除文件夹确认弹窗
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
   const me = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -69,8 +87,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       ])
       setProject(fresh)
       setSubscribed(subs.some((s) => s.target_type === 'project' && s.target_id === project.id))
-      const params: Record<string, unknown> = {}
-      if (categoryId) params.category_id = categoryId
+      const params: Record<string, unknown> = { category_id: folderId }
       if (q) params.q = q
       setAssets(await api.listAssets(project.id, params))
     } catch (e: any) {
@@ -78,7 +95,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     } finally {
       setLoading(false)
     }
-  }, [project.id, categoryId, q])
+  }, [project.id, folderId, q])
 
   useEffect(() => {
     load()
@@ -117,6 +134,21 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     canEdit ||
     project.owner_id === me?.id ||
     (project.members || []).some((m) => m.user?.id === me?.id)
+  // 移动资产：项目所有者/高级管理员，或资产创建者本人
+  const canMoveAsset = (a: Asset) => canEdit || a.created_by === me?.id
+
+  // 当前文件夹下的子文件夹
+  const childFolders = categories.filter((c) => (c.parent_id || 0) === folderId)
+
+  // 面包屑链：从当前 folderId 向上回溯到根
+  const chain: Category[] = []
+  let cursor = folderId
+  while (cursor) {
+    const c = categories.find((x) => x.id === cursor)
+    if (!c) break
+    chain.unshift(c)
+    cursor = c.parent_id || 0
+  }
 
   const toggleSubscribe = async () => {
     try {
@@ -132,7 +164,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     if (!folderName.trim()) return
     setFolderSubmitting(true)
     try {
-      await api.createCategory(project.id, folderName.trim())
+      await api.createCategory(project.id, folderName.trim(), folderId || null)
       message.success('已创建文件夹')
       setFolderName('')
       setFolderOpen(false)
@@ -144,9 +176,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
-  const moveAsset = async (assetId: number, categoryId: number) => {
+  const moveAsset = async (assetId: number, targetFolderId: number) => {
     try {
-      await api.moveAsset(assetId, categoryId)
+      await api.moveAsset(assetId, targetFolderId)
       message.success('已移动')
       load()
     } catch (e: any) {
@@ -154,8 +186,100 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     }
   }
 
+  const moveCategory = async (categoryId: number, targetFolderId: number) => {
+    try {
+      await api.updateCategory(categoryId, { parent_id: targetFolderId })
+      message.success('已移动文件夹')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '移动失败')
+    }
+  }
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteTarget || deleteInput.trim() !== deleteTarget.name) return
+    setDeleteSubmitting(true)
+    try {
+      await api.deleteCategory(deleteTarget.id)
+      message.success('文件夹已删除')
+      setDeleteTarget(null)
+      setDeleteInput('')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '删除失败')
+    } finally {
+      setDeleteSubmitting(false)
+    }
+  }
+
+  // 统一拖拽载荷：asset:1 / folder:2；同时把跟随光标的图标换成文件图标
+  const startDrag = (e: DragEvent<HTMLElement>, key: string, payload: string) => {
+    e.dataTransfer.setData('text/plain', payload)
+    e.dataTransfer.effectAllowed = 'move'
+    if (dragIconRef.current) e.dataTransfer.setDragImage(dragIconRef.current, 24, 24)
+    setDraggingKey(key)
+  }
+
+  const endDrag = () => setDraggingKey(null)
+
+  // 文件夹/面包屑段作为拖放目标：拖资产或文件夹到此处 = 移入该文件夹（0 = 根目录）
+  const dropHandlers = (targetId: number) => ({
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setOverFolder(targetId)
+    },
+    onDragLeave: (e: DragEvent<HTMLElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setOverFolder((cur) => (cur === targetId ? null : cur))
+      }
+    },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      e.preventDefault()
+      setOverFolder(null)
+      const raw = e.dataTransfer.getData('text/plain')
+      if (!raw) return
+      const [kind, idStr] = raw.split(':')
+      const id = Number(idStr)
+      if (!id) return
+      if (kind === 'asset') moveAsset(id, targetId)
+      // 文件夹不能移入自己
+      else if (kind === 'folder' && id !== targetId) moveCategory(id, targetId)
+    },
+  })
+
+  const crumbStyle = (id: number): React.CSSProperties => ({
+    cursor: 'pointer',
+    padding: '2px 6px',
+    borderRadius: 4,
+    color: folderId === id ? '#1677ff' : undefined,
+    fontWeight: folderId === id ? 600 : undefined,
+    background: overFolder === id ? '#e6f4ff' : undefined,
+  })
+
   return (
     <div>
+      {/* 离屏渲染的拖拽跟随图标：拖卡片时显示为文件图标 */}
+      <div
+        ref={dragIconRef}
+        style={{
+          position: 'fixed',
+          top: -1000,
+          left: -1000,
+          width: 52,
+          height: 52,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#fff',
+          border: '1px solid #1677ff',
+          borderRadius: 8,
+          color: '#1677ff',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        }}
+      >
+        <FileOutlined style={{ fontSize: 28 }} />
+      </div>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Space align="center" size={12} wrap>
           <Link to="/">
@@ -208,25 +332,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         {project.description && <Typography.Text type="secondary">{project.description}</Typography.Text>}
 
         <Space wrap>
-          <Select
-            style={{ minWidth: 160 }}
-            allowClear
-            placeholder="全部文件夹"
-            value={categoryId}
-            onChange={(v) => setCategoryId(v)}
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-          />
-          {canEdit && (
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={() => {
-                setFolderName('')
-                setFolderOpen(true)
-              }}
-            >
-              新建文件夹
-            </Button>
-          )}
           <Input.Search
             placeholder="搜索资产名 / 描述 / 标签 / 文件名 / 上传者"
             allowClear
@@ -243,25 +348,175 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               需要项目所有者邀请并同意后，才能上传资产
             </Typography.Text>
           )}
+          {canEdit && (
+            <Button
+              icon={<FolderAddOutlined />}
+              onClick={() => {
+                setFolderName('')
+                setFolderOpen(true)
+              }}
+            >
+              新建文件夹
+            </Button>
+          )}
           <Button icon={<BarChartOutlined />} onClick={() => setRankOpen(true)}>
             贡献排行
           </Button>
         </Space>
 
+        {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+          <span {...dropHandlers(0)} onClick={() => setFolderId(0)} style={crumbStyle(0)}>
+            <HomeOutlined style={{ marginRight: 4 }} />
+            {project.name}
+          </span>
+          {chain.map((c) => (
+            <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: '#bbb' }}>/</span>
+              <span {...dropHandlers(c.id)} onClick={() => setFolderId(c.id)} style={crumbStyle(c.id)}>
+                {c.name}
+              </span>
+            </span>
+          ))}
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60 }}>
             <Spin />
           </div>
-        ) : assets.length === 0 ? (
-          <Empty description={q ? '没有匹配的资产' : '暂无资产'} style={{ marginTop: 60 }} />
+        ) : childFolders.length === 0 && assets.length === 0 ? (
+          <Empty
+            description={q ? '没有匹配的资产' : folderId === 0 ? '暂无内容' : '此文件夹为空'}
+            style={{ marginTop: 60 }}
+          />
         ) : (
           <Row gutter={[16, 16]}>
+            {childFolders.map((c) => {
+              const subCount = categories.filter((x) => (x.parent_id || 0) === c.id).length
+              const hovering = overFolder === c.id
+              return (
+                <Col xs={12} sm={8} lg={6} key={`folder-${c.id}`}>
+                  <div
+                    style={{
+                      position: 'relative',
+                      height: '100%',
+                      opacity: draggingKey === `folder:${c.id}` ? 0.4 : 1,
+                    }}
+                  >
+                    <div
+                      {...dropHandlers(c.id)}
+                      draggable={canEdit}
+                      onDragStart={(e) => startDrag(e, `folder:${c.id}`, `folder:${c.id}`)}
+                      onDragEnd={endDrag}
+                      onClick={() => setFolderId(c.id)}
+                      style={{ height: '100%', cursor: 'pointer' }}
+                    >
+                      <Card
+                        hoverable
+                        styles={{ body: { padding: 12 } }}
+                        style={{ borderColor: hovering ? '#1677ff' : undefined }}
+                        cover={
+                          <div
+                            style={{
+                              height: 150,
+                              position: 'relative',
+                              background: hovering ? '#e6f4ff' : '#fffbe6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: hovering ? '#1677ff' : '#f5b400',
+                            }}
+                          >
+                            {hovering ? (
+                              <FolderOpenOutlined style={{ fontSize: 52 }} />
+                            ) : (
+                              <FolderOutlined style={{ fontSize: 52 }} />
+                            )}
+                            {hovering && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 8,
+                                  left: 0,
+                                  right: 0,
+                                  textAlign: 'center',
+                                  fontSize: 12,
+                                  color: '#1677ff',
+                                }}
+                              >
+                                释放以移入
+                              </div>
+                            )}
+                          </div>
+                        }
+                      >
+                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                          <Typography.Text strong ellipsis={{ tooltip: c.name }}>
+                            {c.name}
+                          </Typography.Text>
+                          <Space size={4} wrap>
+                            <Tag color="blue">{c.asset_count} 个资产</Tag>
+                            {subCount > 0 && <Tag color="purple">{subCount} 个子文件夹</Tag>}
+                          </Space>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {canEdit ? '点击进入 · 拖动可移入其他文件夹' : '点击进入'}
+                          </Typography.Text>
+                          <Space size={4}>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              <FolderOutlined /> 文件夹
+                            </Typography.Text>
+                          </Space>
+                        </Space>
+                      </Card>
+                    </div>
+                    {canEdit && (
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [
+                            {
+                              key: 'delete',
+                              icon: <DeleteOutlined />,
+                              label: '删除文件夹',
+                              danger: true,
+                            },
+                          ],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent.stopPropagation()
+                            if (key === 'delete') {
+                              setDeleteTarget(c)
+                              setDeleteInput('')
+                            }
+                          },
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<MoreOutlined />}
+                          draggable={false}
+                          style={{ position: 'absolute', bottom: 8, right: 8 }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Dropdown>
+                    )}
+                  </div>
+                </Col>
+              )
+            })}
             {assets.map((a) => (
-              <Col xs={24} sm={12} lg={6} key={a.id}>
+              <Col
+                xs={24}
+                sm={12}
+                lg={6}
+                key={a.id}
+                style={{ opacity: draggingKey === `asset:${a.id}` ? 0.4 : 1 }}
+              >
                 <AssetCard
                   asset={a}
-                  categories={categories}
-                  onMove={canEdit || a.created_by === me?.id ? moveAsset : undefined}
+                  draggable={canMoveAsset(a)}
+                  onDragStart={(e) => startDrag(e, `asset:${a.id}`, `asset:${a.id}`)}
+                  onDragEnd={endDrag}
                 />
               </Col>
             ))}
@@ -282,6 +537,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         open={uploadOpen}
         projectId={project.id}
         categories={categories}
+        defaultCategoryId={folderId}
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />
@@ -302,6 +558,34 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           onPressEnter={createFolder}
           autoFocus
         />
+      </Modal>
+
+      {/* 删除文件夹：需输入文件夹名称二次确认 */}
+      <Modal
+        title={`删除文件夹「${deleteTarget?.name ?? ''}」`}
+        open={!!deleteTarget}
+        onOk={confirmDeleteFolder}
+        onCancel={() => {
+          setDeleteTarget(null)
+          setDeleteInput('')
+        }}
+        confirmLoading={deleteSubmitting}
+        okText="删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true, disabled: deleteInput.trim() !== deleteTarget?.name }}
+      >
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Typography.Text type="danger">删除后不可恢复，请谨慎操作。</Typography.Text>
+          <Typography.Text type="secondary">
+            请输入文件夹名称「{deleteTarget?.name}」以确认删除：
+          </Typography.Text>
+          <Input
+            value={deleteInput}
+            onChange={(e) => setDeleteInput(e.target.value)}
+            placeholder={deleteTarget?.name}
+            autoFocus
+          />
+        </Space>
       </Modal>
 
       {/* 贡献排行放在左侧抽屉里，不影响主体布局 */}

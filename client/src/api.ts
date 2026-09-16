@@ -125,9 +125,14 @@ export const api = {
   // ---------- 分类 ----------
   listCategories: (projectId: number) =>
     client.get<Category[]>(`/projects/${projectId}/categories`).then((r) => r.data),
-  createCategory: (projectId: number, name: string) =>
-    client.post<Category>(`/projects/${projectId}/categories`, { name }).then((r) => r.data),
-  updateCategory: (categoryId: number, data: { name?: string; sort_order?: number }) =>
+  createCategory: (projectId: number, name: string, parentId?: number | null) =>
+    client
+      .post<Category>(`/projects/${projectId}/categories`, {
+        name,
+        parent_id: parentId ?? null,
+      })
+      .then((r) => r.data),
+  updateCategory: (categoryId: number, data: { name?: string; sort_order?: number; parent_id?: number }) =>
     client.patch<Category>(`/categories/${categoryId}`, data).then((r) => r.data),
   deleteCategory: (categoryId: number) =>
     client.delete(`/categories/${categoryId}`).then((r) => r.data),

@@ -60,7 +60,10 @@ def list_assets(
     ensure_project_access(db, project_id, user)
     base = db.query(Asset).filter(Asset.project_id == project_id)
 
-    if category_id:
+    # 0 表示根目录（category_id 为 NULL），与前端「0 = 根」哨兵保持一致
+    if category_id == 0:
+        base = base.filter(Asset.category_id.is_(None))
+    elif category_id:
         base = base.filter(Asset.category_id == category_id)
 
     # 项目内全局搜索：资产名 / 描述 / 标签 / 版本文件名 / 上传者昵称或用户名
@@ -102,7 +105,7 @@ def list_assets(
 @router.post("/assets")
 def create_asset(
     project_id: int = Form(...),
-    category_id: int = Form(...),
+    category_id: Optional[int] = Form(None),
     name: str = Form(...),
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
@@ -113,13 +116,17 @@ def create_asset(
     user: User = Depends(get_current_user),
 ):
     project = ensure_project_access(db, project_id, user, write=True)
-    category = db.get(Category, category_id)
-    if category is None or category.project_id != project_id:
-        raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
+    # 0/None 表示放到项目根目录
+    asset_category_id: Optional[int] = None
+    if category_id:
+        category = db.get(Category, category_id)
+        if category is None or category.project_id != project_id:
+            raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
+        asset_category_id = category_id
 
     asset = Asset(
         project_id=project_id,
-        category_id=category_id,
+        category_id=asset_category_id,
         name=name,
         description=description,
         tags=_parse_tags(tags),
@@ -251,10 +258,14 @@ def update_asset(
     if tags is not None:
         asset.tags = _parse_tags(tags)
     if category_id is not None:
-        category = db.get(Category, category_id)
-        if category is None or category.project_id != asset.project_id:
-            raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
-        asset.category_id = category_id
+        # 0 表示移到根目录（category_id = NULL）
+        if category_id == 0:
+            asset.category_id = None
+        else:
+            category = db.get(Category, category_id)
+            if category is None or category.project_id != asset.project_id:
+                raise HTTPException(status_code=400, detail="分类不存在或不属于该项目")
+            asset.category_id = category_id
 
     # 换封面：只改资产级封面（含 42×42 小图），不动任何版本的缩略图
     if thumbnail is not None and thumbnail.filename:
@@ -303,11 +314,14 @@ def move_asset(
             status_code=403, detail="仅资产创建者或项目所有者可移动该资产"
         )
 
-    category = db.get(Category, payload.category_id)
-    if category is None or category.project_id != asset.project_id:
-        raise HTTPException(status_code=400, detail="文件夹不存在或不属于该项目")
-
-    asset.category_id = payload.category_id
+    if payload.category_id:
+        category = db.get(Category, payload.category_id)
+        if category is None or category.project_id != asset.project_id:
+            raise HTTPException(status_code=400, detail="文件夹不存在或不属于该项目")
+        asset.category_id = payload.category_id
+    else:
+        # 0 表示移到项目根目录
+        asset.category_id = None
     db.commit()
     db.refresh(asset)
     return asset_to_dict(asset, current_user_id=user.id)

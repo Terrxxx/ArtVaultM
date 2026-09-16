@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Form, Input, Modal, Select, Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
@@ -10,19 +10,34 @@ interface Props {
   open: boolean
   projectId: number
   categories: Category[]
+  /** 当前所在文件夹（0 = 根目录），上传时预填 */
+  defaultCategoryId?: number
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function UploadAssetModal({ open, projectId, categories, onClose, onSuccess }: Props) {
+export default function UploadAssetModal({
+  open,
+  projectId,
+  categories,
+  defaultCategoryId = 0,
+  onClose,
+  onSuccess,
+}: Props) {
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      form.setFieldValue('category_id', defaultCategoryId)
+    }
+  }, [open, defaultCategoryId, form])
 
   const onOk = async () => {
     const values = await form.validateFields()
     const fd = new FormData()
     fd.append('project_id', String(projectId))
-    fd.append('category_id', String(values.category_id))
+    fd.append('category_id', String(values.category_id ?? 0))
     fd.append('name', values.name)
     if (values.description) fd.append('description', values.description)
     if (values.tags) fd.append('tags', values.tags)
@@ -44,6 +59,11 @@ export default function UploadAssetModal({ open, projectId, categories, onClose,
     }
   }
 
+  const categoryOptions = [
+    { value: 0, label: '根目录' },
+    ...categories.map((c) => ({ value: c.id, label: c.name })),
+  ]
+
   return (
     <Modal
       title="上传资产"
@@ -54,8 +74,8 @@ export default function UploadAssetModal({ open, projectId, categories, onClose,
       width={560}
     >
       <Form form={form} layout="vertical">
-        <Form.Item name="category_id" label="分类" rules={[{ required: true, message: '请选择分类' }]}>
-          <Select placeholder="选择分类" options={categories.map((c) => ({ value: c.id, label: c.name }))} />
+        <Form.Item name="category_id" label="文件夹" rules={[{ required: true, message: '请选择文件夹' }]}>
+          <Select placeholder="选择文件夹" options={categoryOptions} />
         </Form.Item>
         <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
           <Input placeholder="如：英雄模型" />
