@@ -191,6 +191,76 @@ export default function Heatmap({
     </div>
   )
 
+  // 图区自带一层底（暗色下是 #0d1117），空格子才有稳定的底色衬托
+  const panelEl = (
+    <div
+      style={{
+        overflowX: 'auto',
+        background: 'var(--av-heat-canvas)',
+        borderRadius: 6,
+        padding: 8,
+        opacity: loading ? 0.4 : 1,
+        alignSelf: 'flex-start',
+      }}
+    >
+      {vertical ? (
+        <div>
+          {weekdayAxisEl}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {monthAxisEl}
+            {cellsGrid}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 4 }}>
+          {weekdayAxisEl}
+          <div>
+            {monthAxisEl}
+            {cellsGrid}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const controlsEl = (
+    <Space direction="vertical" size={8} align={vertical ? 'start' : 'end'}>
+      <Select
+        size="small"
+        style={{ width: 130 }}
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: RECENT, label: '最近一年' },
+          ...years.map((y) => ({ value: y, label: `${y} 年` })),
+        ]}
+      />
+      <Space size={4} align="center">
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          少
+        </Typography.Text>
+        {COLORS.map((c) => (
+          <div
+            key={c}
+            style={{
+              width: CELL,
+              height: CELL,
+              borderRadius: RADIUS,
+              background: c,
+              boxShadow: CELL_EDGE,
+            }}
+          />
+        ))}
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          多
+        </Typography.Text>
+      </Space>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        共 {total} 次更新
+      </Typography.Text>
+    </Space>
+  )
+
   return (
     <div
       style={{
@@ -202,71 +272,10 @@ export default function Heatmap({
         flexWrap: 'wrap',
       }}
     >
-      {/* 图区自带一层底（暗色下是 #0d1117），空格子才有稳定的底色衬托 */}
-      <div
-        style={{
-          overflowX: 'auto',
-          background: 'var(--av-heat-canvas)',
-          borderRadius: 6,
-          padding: 8,
-          opacity: loading ? 0.4 : 1,
-          alignSelf: 'flex-start',
-        }}
-      >
-        {vertical ? (
-          <div>
-            {weekdayAxisEl}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {monthAxisEl}
-              {cellsGrid}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 4 }}>
-            {weekdayAxisEl}
-            <div>
-              {monthAxisEl}
-              {cellsGrid}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Space direction="vertical" size={8} align={vertical ? 'start' : 'end'}>
-        <Select
-          size="small"
-          style={{ width: 130 }}
-          value={value}
-          onChange={onChange}
-          options={[
-            { value: RECENT, label: '最近一年' },
-            ...years.map((y) => ({ value: y, label: `${y} 年` })),
-          ]}
-        />
-        <Space size={4} align="center">
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            少
-          </Typography.Text>
-          {COLORS.map((c) => (
-            <div
-              key={c}
-              style={{
-                width: CELL,
-                height: CELL,
-                borderRadius: RADIUS,
-                background: c,
-                boxShadow: CELL_EDGE,
-              }}
-            />
-          ))}
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            多
-          </Typography.Text>
-        </Space>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          共 {total} 次更新
-        </Typography.Text>
-      </Space>
+      {/* 竖向是窄栏，年份和说明放上面更顺手；横向仍然放在右边 */}
+      {vertical && controlsEl}
+      {panelEl}
+      {!vertical && controlsEl}
     </div>
   )
 }

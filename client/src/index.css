@@ -91,12 +91,15 @@ body.av-wide .av-content {
   display: flex;
   gap: 20px;
   align-items: flex-start;
+  /* 屏幕很宽时把富余空间分到两侧，中间主体保持原来的 1200px 不被拉宽 */
+  justify-content: space-between;
   flex-wrap: wrap;
 }
 
 .av-project-main {
   flex: 1 1 560px;
   min-width: 0;
+  max-width: 1200px;
 }
 
 .av-rail-left {
