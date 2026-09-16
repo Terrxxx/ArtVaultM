@@ -5,10 +5,9 @@ from ..database import get_db
 from ..models import Folder, User
 from ..schemas import FolderCreate, FolderUpdate
 from ..serializers import folder_to_dict
-from ..services import storage_config
+from ..services import trash
 from ..services.folders import collect_subtree, subtree_counts
 from ..services.permissions import can_delete_folder
-from .assets import purge_asset
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
@@ -110,11 +109,11 @@ def delete_folder(
 
     subtree = collect_subtree(folder)
 
-    # 连同所有子孙文件夹及其中的资产一起删除，子级先删避免留下悬挂引用
-    cos = storage_config.cos_params(db)
-    for node in reversed(subtree):
+    # 资产进回收站（记住原文件夹，恢复时尽量放回去），文件夹本身直接删
+    for node in subtree:
         for asset in list(node.assets):
-            purge_asset(db, asset, cos)
+            trash.soft_delete(asset)
+    for node in reversed(subtree):
         db.delete(node)
 
     db.commit()

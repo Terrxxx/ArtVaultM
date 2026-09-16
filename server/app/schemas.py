@@ -88,6 +88,13 @@ class StorageConfigIn(BaseModel):
     cos_prefix: Optional[str] = None
 
 
+# ---------- 分片上传 ----------
+class UploadInit(BaseModel):
+    project_id: int
+    file_name: str = Field(min_length=1)
+    file_size: int = Field(ge=0)
+
+
 # ---------- 资产移动（文件夹） ----------
 class AssetMoveRequest(BaseModel):
     folder_id: int = 0  # 0 表示根目录

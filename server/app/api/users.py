@@ -77,7 +77,7 @@ def _profile_payload(db: Session, target: User, viewer: User) -> dict:
     """
     all_assets = (
         db.query(Asset)
-        .filter(Asset.created_by == target.id)
+        .filter(Asset.created_by == target.id, Asset.deleted_at.is_(None))
         .order_by(Asset.created_at.desc())
         .all()
     )

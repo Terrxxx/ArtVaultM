@@ -38,6 +38,16 @@ def _safe_name(filename: str) -> str:
     return os.path.basename(filename.replace("\\", "/")) or "file"
 
 
+def safe_name(filename: str) -> str:
+    """对外暴露的文件名清洗（分片上传也用）。"""
+    return _safe_name(filename)
+
+
+def new_staged_path() -> Path:
+    """在暂存目录里开一个新的空文件路径（分片合并后落到这里，再由 place_upload 搬走）。"""
+    return _tmp_dir() / f"{uuid.uuid4().hex}.part"
+
+
 def _tmp_dir() -> Path:
     d = Path(settings.upload_dir) / "_tmp"
     d.mkdir(parents=True, exist_ok=True)

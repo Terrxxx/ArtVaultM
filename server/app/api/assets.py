@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
-from ..serializers import asset_to_dict
-from ..services import notify, storage, storage_config
-from ..services.permissions import can_delete_asset, can_move_asset
+from ..serializers import asset_to_dict, user_brief
+from ..services import chunked_upload, notify, storage, storage_config, trash
+from ..services.permissions import can_delete_asset, can_manage_trash, can_move_asset
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
@@ -22,6 +22,21 @@ def _parse_tags(raw: Optional[str]) -> List[str]:
 
 def _target_storage(cos: Optional[dict]) -> str:
     return "cos" if cos else "local"
+
+
+def take_staged(file: Optional[UploadFile], upload_id: Optional[str], user: User) -> dict:
+    """两种文件入口：小文件直接 POST，大文件先走分片（upload_id），到这里再合并。
+
+    返回的结构与 storage.stage_upload 一致，后面的去重/落盘/派生逻辑两条路共用。
+    """
+    if upload_id:
+        try:
+            return chunked_upload.finish(upload_id, user.id)
+        except chunked_upload.UploadSessionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if file is None or not file.filename:
+        raise HTTPException(status_code=400, detail="缺少文件")
+    return storage.stage_upload(file)
 
 
 def purge_asset(db: Session, asset: Asset, cos: Optional[dict]) -> None:
@@ -68,11 +83,19 @@ def list_assets(
     q: Optional[str] = None,
     tag: Optional[str] = None,
     fmt: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """列项目里的资产。
+
+    limit/offset 在**所有筛选之后**才切（搜索、标签、格式都可能有 Python 侧过滤），
+    同时序列化也只做切出来的那一段——资产多的时候这一步才是主要开销。
+    limit 不传就是全部，兼容老调用方。
+    """
     ensure_project_access(db, project_id, user)
-    base = db.query(Asset).filter(Asset.project_id == project_id)
+    base = db.query(Asset).filter(Asset.project_id == project_id, trash.alive())
 
     # 0 表示根目录（folder_id 为 NULL），与前端「0 = 根」哨兵保持一致
     if folder_id == 0:
@@ -106,17 +129,18 @@ def list_assets(
     else:
         assets = base.order_by(Asset.created_at.desc()).all()
 
+    if tag:
+        assets = [a for a in assets if tag in (a.tags or [])]
+
     # 版本关系已按 version desc 排序，取第一个即最新版本
     if fmt:
         fmt_low = fmt.lower()
         assets = [a for a in assets if a.versions and a.versions[0].file_format == fmt_low]
 
-    result = [asset_to_dict(a, viewer=user) for a in assets]
+    if limit is not None:
+        assets = assets[offset : offset + max(0, limit)]
 
-    if tag:
-        result = [a for a in result if tag in (a.get("tags") or [])]
-
-    return result
+    return [asset_to_dict(a, viewer=user) for a in assets]
 
 
 @router.post("/assets")
@@ -128,7 +152,8 @@ def create_asset(
     description: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     changelog: Optional[str] = Form(None),
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    upload_id: Optional[str] = Form(None),
     thumbnail: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -163,7 +188,7 @@ def create_asset(
     db.flush()
 
     cos = storage_config.cos_params(db)
-    staged = storage.stage_upload(file)
+    staged = take_staged(file, upload_id, user)
     # 图片资产可能要用文件本身派生封面，且临时文件稍后会被移走，这里先读出来。
     # 只对图片格式读入内存，避免大模型文件占用。
     file_bytes = (
@@ -253,7 +278,7 @@ def get_asset(
     user: User = Depends(get_current_user),
 ):
     asset = db.get(Asset, asset_id)
-    if asset is None:
+    if asset is None or trash.is_deleted(asset):
         raise HTTPException(status_code=404, detail="资产不存在")
     ensure_project_access(db, asset.project_id, user)
     return asset_to_dict(asset, include_versions=True, viewer=user)
@@ -362,6 +387,91 @@ def delete_asset(
             status_code=403, detail="仅资产创建者或高级管理员可删除该资产"
         )
 
+    # 进回收站：文件留着，满 TRASH_TTL_DAYS 天才会被彻底删除
+    trash.soft_delete(asset)
+    db.commit()
+    return {"ok": True, "trashed": True}
+
+
+def purge_expired_trash(db: Session) -> int:
+    """回收站里超过保留期的资产彻底删除（含实体文件）。"""
+    rows = trash.expired(db)
+    if not rows:
+        return 0
+    cos = storage_config.cos_params(db)
+    for asset in rows:
+        purge_asset(db, asset, cos)
+    db.commit()
+    return len(rows)
+
+
+def _trash_item(asset: Asset, viewer: User) -> dict:
+    latest = next((v for v in asset.versions if v.is_latest), None) or (
+        asset.versions[0] if asset.versions else None
+    )
+    cover_path = asset.cover_thumbnail or (latest.thumbnail if latest else None)
+    cover_storage = asset.cover_thumbnail_storage or (
+        latest.thumbnail_storage if latest and not asset.cover_thumbnail else "local"
+    )
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "project_id": asset.project_id,
+        "creator": user_brief(asset.creator),
+        "version_count": len(asset.versions),
+        "cover_thumbnail_url": storage.display_url(cover_path, cover_storage),
+        "deleted_at": asset.deleted_at.isoformat() if asset.deleted_at else None,
+        "deleted_from_folder_id": asset.deleted_from_folder_id,
+        "can_manage": can_manage_trash(asset, viewer),
+    }
+
+
+@router.get("/projects/{project_id}/trash")
+def list_trash(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """项目回收站。打开时顺手清掉过期的，省得再挂定时任务。"""
+    ensure_project_access(db, project_id, user)
+    purge_expired_trash(db)
+    rows = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.deleted_at.isnot(None))
+        .order_by(Asset.deleted_at.desc())
+        .all()
+    )
+    return [_trash_item(a, user) for a in rows]
+
+
+@router.post("/assets/{asset_id}/restore")
+def restore_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    asset = db.get(Asset, asset_id)
+    if asset is None or not trash.is_deleted(asset):
+        raise HTTPException(status_code=404, detail="回收站里没有这个资产")
+    if not can_manage_trash(asset, user):
+        raise HTTPException(status_code=403, detail="没有权限恢复该资产")
+    trash.restore(db, asset)
+    db.commit()
+    return {"ok": True, "folder_id": asset.folder_id}
+
+
+@router.delete("/assets/{asset_id}/purge")
+def purge_trashed_asset(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """彻底删除：连文件一起抹掉。"""
+    asset = db.get(Asset, asset_id)
+    if asset is None or not trash.is_deleted(asset):
+        raise HTTPException(status_code=404, detail="回收站里没有这个资产")
+    if not can_manage_trash(asset, user):
+        raise HTTPException(status_code=403, detail="没有权限彻底删除该资产")
     purge_asset(db, asset, storage_config.cos_params(db))
     db.commit()
     return {"ok": True}

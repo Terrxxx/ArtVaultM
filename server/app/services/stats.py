@@ -39,7 +39,7 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
     # 内容体量
     asset_counts = dict(
         db.query(Asset.project_id, func.count(Asset.id))
-        .filter(Asset.project_id.in_(project_ids))
+        .filter(Asset.project_id.in_(project_ids), Asset.deleted_at.is_(None))
         .group_by(Asset.project_id)
         .all()
     )
@@ -65,6 +65,7 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
         .join(AssetVersion, AssetVersion.asset_id == Asset.id)
         .filter(
             Asset.project_id.in_(project_ids),
+            Asset.deleted_at.is_(None),
             AssetVersion.created_at >= since,
         )
         .group_by(Asset.project_id)
@@ -101,11 +102,11 @@ def _base_version_query(
     db: Session, project_id: Optional[int], user_id: Optional[int]
 ):
     """按项目或用户圈定版本记录。"""
-    query = db.query(AssetVersion)
+    # 回收站里的资产不算活跃度；统一 join 上 Asset 才能过滤
+    query = db.query(AssetVersion).join(Asset, AssetVersion.asset_id == Asset.id)
+    query = query.filter(Asset.deleted_at.is_(None))
     if project_id is not None:
-        query = query.join(Asset, AssetVersion.asset_id == Asset.id).filter(
-            Asset.project_id == project_id
-        )
+        query = query.filter(Asset.project_id == project_id)
     if user_id is not None:
         query = query.filter(AssetVersion.uploader_id == user_id)
     return query

@@ -227,6 +227,24 @@ export interface UpdateItem {
   uploader?: UserBrief | null
 }
 
+/**
+ * 回收站里的一条资产。
+ * 删除只打标记，文件还在；满 30 天后由后端彻底清理。
+ */
+export interface TrashItem {
+  id: number
+  name: string
+  project_id: number
+  creator?: UserBrief | null
+  version_count: number
+  cover_thumbnail_url?: string | null
+  deleted_at?: string | null
+  /** 进回收站前所在的文件夹 id（文件夹可能已经没了） */
+  deleted_from_folder_id?: number | null
+  /** 能不能恢复 / 彻底删除 */
+  can_manage: boolean
+}
+
 /** 排行榜条目 */
 export interface LeaderboardItem {
   user: UserBrief

@@ -14,6 +14,7 @@ import type {
   Project,
   ProjectMember,
   StorageConfig,
+  TrashItem,
   User,
   UserBrief,
   UserProfile,
@@ -157,6 +158,45 @@ export const api = {
   moveAsset: (id: number, folderId: number) =>
     client.patch<Asset>(`/assets/${id}/folder`, { folder_id: folderId }).then((r) => r.data),
 
+  // ---------- 回收站 ----------
+  /** 项目回收站：已软删除的资产 */
+  listTrash: (projectId: number) =>
+    client.get<TrashItem[]>(`/projects/${projectId}/trash`).then((r) => r.data),
+  restoreAsset: (assetId: number) =>
+    client.post(`/assets/${assetId}/restore`).then((r) => r.data),
+  purgeAsset: (assetId: number) =>
+    client.delete(`/assets/${assetId}/purge`).then((r) => r.data),
+
+  // ---------- 分片上传 ----------
+  /** 开一个分片上传会话（大文件用） */
+  uploadInit: (data: { project_id: number; file_name: string; file_size: number }) =>
+    client
+      .post<{
+        upload_id: string
+        chunk_size: number
+        total_chunks: number
+        uploaded: number[]
+      }>('/uploads/init', data)
+      .then((r) => r.data),
+  /** 续传前对账：已经收到哪些分片 */
+  uploadStatus: (uploadId: string) =>
+    client
+      .get<{ upload_id: string; uploaded: number[] }>(`/uploads/${uploadId}`)
+      .then((r) => r.data),
+  /** 传一个分片；用裸 body，省掉 multipart 封装 */
+  uploadChunk: (
+    uploadId: string,
+    index: number,
+    blob: Blob,
+    onProgress?: (loaded: number) => void,
+  ) =>
+    client
+      .post(`/uploads/${uploadId}/chunks/${index}`, blob, {
+        headers: { 'Content-Type': 'application/octet-stream' },
+        onUploadProgress: (e) => onProgress?.(e.loaded),
+      })
+      .then((r) => r.data),
+
   // ---------- 版本 ----------
   listVersions: (assetId: number) =>
     client.get<Version[]>(`/assets/${assetId}/versions`).then((r) => r.data),
@@ -168,6 +208,12 @@ export const api = {
   /** 只改版本说明，不动文件 */
   updateVersionChangelog: (versionId: number, changelog: string) =>
     client.patch<Version>(`/versions/${versionId}`, { changelog }).then((r) => r.data),
+  /** 以某个历史版本为准再发一版：文件复用，不重新上传 */
+  rollbackVersion: (versionId: number, changelog?: string) => {
+    const fd = new FormData()
+    if (changelog != null) fd.append('changelog', changelog)
+    return client.post<Version>(`/versions/${versionId}/rollback`, fd).then((r) => r.data)
+  },
   deleteVersion: (versionId: number) =>
     client.delete(`/versions/${versionId}`).then((r) => r.data),
   downloadStats: (assetId: number) =>

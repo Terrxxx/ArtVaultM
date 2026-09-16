@@ -150,7 +150,7 @@ def folder_to_dict(f: Folder, viewer: Optional[User] = None) -> dict:
         "parent_id": f.parent_id,
         "name": f.name,
         "sort_order": f.sort_order,
-        "asset_count": len(f.assets),
+        "asset_count": sum(1 for a in f.assets if a.deleted_at is None),
         "subtree_asset_count": subtree_assets,
         "subtree_folder_count": subtree_folders,
         # 能力字段：成员也能整理文件夹，但子树里有资产时只有创建者/高级管理员能删
@@ -189,7 +189,7 @@ def project_to_dict(
         "owner_id": p.owner_id,
         "owner": user_brief(p.owner),
         "created_at": p.created_at.isoformat() if p.created_at else None,
-        "asset_count": len(p.assets),
+        "asset_count": sum(1 for a in p.assets if a.deleted_at is None),
         "category_count": len(p.categories),
         "folder_count": len(p.folders),
         "member_count": len(accepted),

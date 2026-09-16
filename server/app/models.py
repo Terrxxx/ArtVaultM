@@ -139,6 +139,10 @@ class Asset(Base):
     status = Column(String, default="published")
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # 非空表示已进回收站（文件还在，30 天后才真删）
+    deleted_at = Column(DateTime, nullable=True)
+    # 进回收站前所在的文件夹；只存 id，因为删文件夹时文件夹本身已经没了
+    deleted_from_folder_id = Column(Integer, nullable=True)
 
     project = relationship("Project", back_populates="assets")
     category = relationship("Category", back_populates="assets")

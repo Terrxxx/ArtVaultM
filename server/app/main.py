@@ -20,6 +20,7 @@ from .api import (
     notifications,
     projects,
     subscriptions,
+    uploads,
     users,
     versions,
 )
@@ -28,6 +29,7 @@ from .core.security import hash_password
 from .database import Base, SessionLocal, engine
 from .models import Asset, Project, User
 from .services import storage_config
+from .services import chunked_upload
 from .services.asset_types import DEFAULT_ASSET_TYPES
 from .services.slug import slugify
 
@@ -47,6 +49,8 @@ WANTED_COLUMNS = {
     },
     "assets": {
         "folder_id": "INTEGER REFERENCES folders(id)",
+        "deleted_at": "DATETIME",
+        "deleted_from_folder_id": "INTEGER",
         "cover_thumbnail_storage": "VARCHAR DEFAULT 'local'",
         "small_thumbnail": "VARCHAR",
         "small_thumbnail_storage": "VARCHAR DEFAULT 'local'",
@@ -231,6 +235,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_columns()
     migrate_asset_category_nullable()
+    # 没传完的分片会话留在磁盘上，启动时清一次
+    chunked_upload.purge_stale()
+    # 回收站里过了保留期的资产彻底删掉
+    with SessionLocal() as db:
+        assets.purge_expired_trash(db)
     migrate_folders_from_categories()
     backfill_slugs()
     seed_admin()
@@ -262,6 +271,7 @@ app.include_router(members.router, prefix="/api", tags=["members"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(folders.router, prefix="/api", tags=["folders"])
 app.include_router(assets.router, prefix="/api", tags=["assets"])
+app.include_router(uploads.router, prefix="/api", tags=["uploads"])
 app.include_router(versions.router, prefix="/api", tags=["versions"])
 app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(likes.router, prefix="/api", tags=["likes"])

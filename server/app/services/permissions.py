@@ -76,6 +76,13 @@ def can_delete_asset(asset: Optional[Asset], user: Optional[User]) -> bool:
     return is_super_admin(user) or asset.created_by == user.id
 
 
+def can_manage_trash(asset: Optional[Asset], user: Optional[User]) -> bool:
+    """回收站里的恢复/彻底删除：资产创建者、高级管理员，或项目创建者。"""
+    if user is None or asset is None:
+        return False
+    return can_delete_asset(asset, user) or can_edit_project(asset.project, user)
+
+
 def can_delete_folder(folder: Optional[Folder], user: Optional[User]) -> bool:
     """删除文件夹（会连整个子树的资产一起删）。
 

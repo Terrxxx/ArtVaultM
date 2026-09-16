@@ -15,6 +15,7 @@ from ..models import Asset, AssetVersion, DownloadLog, User
 from ..schemas import VersionChangelogUpdate
 from ..serializers import version_to_dict
 from ..services import notify, storage, storage_config
+from .assets import take_staged
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
@@ -78,7 +79,8 @@ def list_versions(
 @router.post("/assets/{asset_id}/versions")
 def upload_version(
     asset_id: int,
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    upload_id: Optional[str] = Form(None),
     changelog: Optional[str] = Form(None),
     thumbnail: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -92,7 +94,7 @@ def upload_version(
         v.is_latest = False
 
     cos = storage_config.cos_params(db)
-    staged = storage.stage_upload(file)
+    staged = take_staged(file, upload_id, user)
     # 图片版本要用文件本身派生 42×42 小图，且临时文件稍后会被移走，这里先读出来
     file_bytes = (
         staged["tmp_path"].read_bytes()
@@ -308,30 +310,42 @@ def stream_version(
     return FileResponse(path)
 
 
-def _delete_version_files(db: Session, version: AssetVersion, cos: Optional[dict]) -> None:
-    """删除版本的实体文件。
-
-    上传时会按文件哈希去重，多个版本可能共用同一个文件，这种情况下只删缩略图。
-    """
-    shared = (
+def _is_shared(db: Session, version: AssetVersion, field: str) -> bool:
+    """这个路径是否还被同一个资产的其它版本用着（上传去重、或回滚派生时会出现共用）。"""
+    value = getattr(version, field)
+    if not value:
+        return False
+    return (
         db.query(AssetVersion)
         .filter(
-            AssetVersion.file_path == version.file_path,
+            getattr(AssetVersion, field) == value,
             AssetVersion.id != version.id,
         )
         .first()
         is not None
     )
-    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
-    storage.delete_file(version.thumb_small, version.thumb_small_storage or "local", cos)
-    if not shared:
-        storage.delete_file(version.file_path, version.storage or "local", cos)
+
+
+def _delete_version_files(db: Session, version: AssetVersion, cos: Optional[dict]) -> None:
+    """删除版本的实体文件。
+
+    文件、缩略图都可能被其它版本共用（上传时按哈希去重、回滚时直接复用），
+    被共用的一律不删实体，只删这条记录。
+    """
+    for field in ("thumbnail", "thumb_small", "file_path"):
+        if _is_shared(db, version, field):
+            continue
+        storage_value = (
+            version.storage if field == "file_path" else getattr(version, f"{field}_storage")
+        )
+        storage.delete_file(getattr(version, field), storage_value or "local", cos)
 
 
 @router.post("/versions/{version_id}/source")
 def replace_version_source(
     version_id: int,
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    upload_id: Optional[str] = Form(None),
     changelog: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -347,7 +361,7 @@ def replace_version_source(
     ensure_project_access(db, asset.project_id, user, write=True)
 
     cos = storage_config.cos_params(db)
-    staged = storage.stage_upload(file)
+    staged = take_staged(file, upload_id, user)
     # 图片文件要用它本身派生小图，临时文件稍后会被移走，先读出来
     file_bytes = (
         staged["tmp_path"].read_bytes()
@@ -379,6 +393,67 @@ def replace_version_source(
     )
     version.thumb_small = small["path"]
     version.thumb_small_storage = small["storage"]
+
+    db.commit()
+    db.refresh(version)
+    return version_to_dict(version)
+
+
+@router.post("/versions/{version_id}/rollback")
+def rollback_version(
+    version_id: int,
+    changelog: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """以某个历史版本为准再发一版：文件和缩略图直接复用，不重新上传。
+
+    版本号照常递增，老版本原样保留；文件被两个版本共用时删除逻辑会跳过实体文件。
+    """
+    src = db.get(AssetVersion, version_id)
+    if src is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    asset = src.asset
+    project = ensure_project_access(db, asset.project_id, user, write=True)
+
+    next_version = max((v.version for v in asset.versions), default=0) + 1
+    for v in asset.versions:
+        v.is_latest = False
+
+    version = AssetVersion(
+        asset_id=asset.id,
+        version=next_version,
+        is_latest=True,
+        changelog=changelog if changelog is not None else f"回滚到 v{src.version}",
+        # 缩略图与文件都直接指向原版本，实体只有一份
+        thumbnail=src.thumbnail,
+        thumbnail_storage=src.thumbnail_storage,
+        thumb_small=src.thumb_small,
+        thumb_small_storage=src.thumb_small_storage,
+        storage=src.storage,
+        file_path=src.file_path,
+        file_name=src.file_name,
+        file_size=src.file_size,
+        file_format=src.file_format,
+        file_hash=src.file_hash,
+        uploader_id=user.id,
+    )
+    db.add(version)
+
+    summary = f"资产「{asset.name}」发布新版本 v{next_version}"
+    targets = set(notify.subscriber_ids(db, "asset", asset.id)) | set(
+        notify.subscriber_ids(db, "project", project.id)
+    )
+    for sub_user_id in targets:
+        notify.add_notification(
+            db,
+            sub_user_id,
+            "update",
+            actor_id=user.id,
+            project_id=project.id,
+            asset_id=asset.id,
+            content=summary,
+        )
 
     db.commit()
     db.refresh(version)

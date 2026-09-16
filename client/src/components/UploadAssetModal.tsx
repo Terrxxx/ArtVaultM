@@ -1,10 +1,29 @@
 import { useState } from 'react'
-import { Button, Form, Input, Modal, Select, Upload, message } from 'antd'
+import { Button, Form, Input, Modal, Select, Space, Tag, Typography, Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
+import { clearUploadSession, needsChunkedUpload, uploadFileInChunks } from '../uploader'
 import type { Category } from '../types'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
+
+/** 文件名去掉扩展名，作为默认资产名 */
+function defaultAssetName(filename: string): string {
+  const i = filename.lastIndexOf('.')
+  return i > 0 ? filename.slice(0, i) : filename
+}
+
+type RowStatus = 'pending' | 'uploading' | 'done' | 'error'
+
+interface Row {
+  uid: string
+  file: File
+  name: string
+  status: RowStatus
+  error?: string
+  /** 大文件分片上传的进度 0~1 */
+  progress?: number
+}
 
 interface Props {
   open: boolean
@@ -26,44 +45,122 @@ export default function UploadAssetModal({
   onSuccess,
 }: Props) {
   const [form] = Form.useForm()
+  const [rows, setRows] = useState<Row[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  // 只有一个文件时，才让填描述和单独传缩略图
+  const single = rows.length === 1
+
+  const close = () => {
+    form.resetFields()
+    setRows([])
+    onClose()
+  }
+
+  // 选完文件后按 uid 保留已填的名字，去掉的文件直接丢掉
+  const onFilesChange = (list: any[]) => {
+    setRows((prev) => {
+      const byUid = new Map(prev.map((r) => [r.uid, r]))
+      return list
+        .filter((f) => f.originFileObj)
+        .map(
+          (f) =>
+            byUid.get(f.uid) ?? {
+              uid: f.uid,
+              file: f.originFileObj as File,
+              name: defaultAssetName(f.name || f.originFileObj.name),
+              status: 'pending' as const,
+            },
+        )
+    })
+  }
+
+  const setName = (uid: string, name: string) =>
+    setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, name } : r)))
 
   const onOk = async () => {
     const values = await form.validateFields()
-    const fd = new FormData()
-    fd.append('project_id', String(projectId))
-    // 落在当前所在目录，不需要用户选
-    fd.append('folder_id', String(folderId))
-    if (values.category_id) fd.append('category_id', String(values.category_id))
-    fd.append('name', values.name)
-    if (values.description) fd.append('description', values.description)
-    if (values.tags) fd.append('tags', values.tags)
-    if (values.changelog) fd.append('changelog', values.changelog)
-    fd.append('file', values.file[0].originFileObj)
-    if (values.thumbnail?.[0]?.originFileObj) fd.append('thumbnail', values.thumbnail[0].originFileObj)
+    if (rows.length === 0) {
+      message.warning('请先选择文件')
+      return
+    }
+    if (rows.some((r) => !r.name.trim())) {
+      message.warning('每个文件的资产名称都不能为空')
+      return
+    }
 
     setSubmitting(true)
-    try {
-      await api.createAsset(fd)
-      message.success('上传成功')
-      form.resetFields()
-      onSuccess()
-      onClose()
-    } catch (e: any) {
-      message.error(e.response?.data?.detail || '上传失败')
-    } finally {
-      setSubmitting(false)
+    const next = rows.map((r) => ({ ...r }))
+    let doneCount = 0
+
+    for (let i = 0; i < next.length; i++) {
+      if (next[i].status === 'done') {
+        doneCount += 1
+        continue
+      }
+      next[i] = { ...next[i], status: 'uploading', error: undefined, progress: undefined }
+      const paint = () => setRows(next.map((r) => ({ ...r })))
+      paint()
+
+      const fd = new FormData()
+      fd.append('project_id', String(projectId))
+      // 落在当前所在目录，不需要用户选
+      fd.append('folder_id', String(folderId))
+      if (values.category_id) fd.append('category_id', String(values.category_id))
+      if (values.tags) fd.append('tags', values.tags)
+      if (values.changelog) fd.append('changelog', values.changelog)
+      if (single && values.description) fd.append('description', values.description)
+      fd.append('name', next[i].name.trim())
+      const thumb = single ? values.thumbnail?.[0]?.originFileObj : null
+      if (thumb) fd.append('thumbnail', thumb)
+
+      try {
+        // 大文件先分片传，传完把 upload_id 交给后端合并；小文件仍旧一次性 POST
+        if (needsChunkedUpload(next[i].file)) {
+          const uploadId = await uploadFileInChunks(next[i].file, projectId, (prog) => {
+            next[i] = { ...next[i], progress: prog.ratio }
+            paint()
+          })
+          fd.append('upload_id', uploadId)
+        } else {
+          fd.append('file', next[i].file)
+        }
+        await api.createAsset(fd)
+        clearUploadSession(next[i].file)
+        next[i] = { ...next[i], status: 'done', progress: undefined }
+        doneCount += 1
+      } catch (e: any) {
+        next[i] = {
+          ...next[i],
+          status: 'error',
+          error: e.response?.data?.detail || '上传失败',
+        }
+      }
+      paint()
+    }
+
+    setSubmitting(false)
+    onSuccess()
+
+    if (doneCount === next.length) {
+      message.success(next.length === 1 ? '上传成功' : `已上传 ${doneCount} 个资产`)
+      close()
+    } else {
+      // 失败的留在弹窗里，改完可以直接重试（已成功的会跳过）
+      message.warning(`成功 ${doneCount} 个，失败 ${next.length - doneCount} 个`)
     }
   }
 
   return (
     <Modal
-      title="上传资产"
+      title="新建资产"
       open={open}
       onOk={onOk}
-      onCancel={onClose}
+      onCancel={close}
       confirmLoading={submitting}
-      width={560}
+      okText={rows.length > 1 ? `上传 ${rows.length} 个` : '上传'}
+      cancelText="取消"
+      width={620}
     >
       <Form form={form} layout="vertical">
         <Form.Item
@@ -77,37 +174,79 @@ export default function UploadAssetModal({
             options={categories.map((c) => ({ value: c.id, label: c.name }))}
           />
         </Form.Item>
-        <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入资产名称' }]}>
-          <Input placeholder="如：英雄模型" />
-        </Form.Item>
-        <Form.Item name="description" label="描述">
-          <Input.TextArea rows={2} placeholder="资产说明" />
-        </Form.Item>
+
+        {single && (
+          <Form.Item name="description" label="描述">
+            <Input.TextArea rows={2} placeholder="资产说明" />
+          </Form.Item>
+        )}
+
         <Form.Item name="tags" label="标签（逗号分隔）">
           <Input placeholder="角色,主角" />
         </Form.Item>
         <Form.Item name="changelog" label="版本说明">
           <Input placeholder="初版" />
         </Form.Item>
-        <Form.Item
-          name="file"
-          label="资产文件"
-          rules={[{ required: true, message: '请选择文件' }]}
-          valuePropName="fileList"
-          getValueFromEvent={normFile}
-        >
-          <Upload.Dragger beforeUpload={() => false} maxCount={1}>
+
+        <Form.Item label="资产文件" extra="可一次选多个文件，每个文件生成一个资产">
+          <Upload.Dragger
+            multiple
+            showUploadList={false}
+            beforeUpload={() => false}
+            onChange={({ fileList }) => onFilesChange(fileList)}
+          >
             <p className="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p className="ant-upload-text">点击或拖拽文件到此处上传</p>
+            <p className="ant-upload-text">点击或拖拽文件到此处，支持一次选多个</p>
           </Upload.Dragger>
         </Form.Item>
-        <Form.Item name="thumbnail" label="缩略图（可选）" valuePropName="fileList" getValueFromEvent={normFile}>
-          <Upload beforeUpload={() => false} maxCount={1} listType="picture">
-            <Button>选择图片</Button>
-          </Upload>
-        </Form.Item>
+
+        {rows.length > 0 && (
+          <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              {rows.map((r) => (
+                <div key={r.uid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Input
+                    value={r.name}
+                    onChange={(e) => setName(r.uid, e.target.value)}
+                    placeholder="资产名称"
+                    status={r.status === 'error' ? 'error' : undefined}
+                    disabled={r.status === 'done' || submitting}
+                  />
+                  <Typography.Text
+                    type="secondary"
+                    style={{ fontSize: 12, width: 120, flexShrink: 0, textAlign: 'right' }}
+                    ellipsis={{ tooltip: r.file.name }}
+                  >
+                    {r.file.name}
+                  </Typography.Text>
+                  <div style={{ width: 64, flexShrink: 0, textAlign: 'right' }}>
+                    {r.status === 'uploading' && (
+                      <Tag color="processing">
+                        {r.progress != null ? `${Math.round(r.progress * 100)}%` : '上传中'}
+                      </Tag>
+                    )}
+                    {r.status === 'done' && <Tag color="green">完成</Tag>}
+                    {r.status === 'error' && (
+                      <Tag color="red" title={r.error}>
+                        失败
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </Space>
+          </div>
+        )}
+
+        {single && (
+          <Form.Item name="thumbnail" label="缩略图（可选）" valuePropName="fileList" getValueFromEvent={normFile}>
+            <Upload beforeUpload={() => false} maxCount={1} listType="picture">
+              <Button>选择图片</Button>
+            </Upload>
+          </Form.Item>
+        )}
       </Form>
     </Modal>
   )

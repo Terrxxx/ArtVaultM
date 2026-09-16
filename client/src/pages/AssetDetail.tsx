@@ -29,6 +29,7 @@ import {
   LikeFilled,
   LikeOutlined,
   MoreOutlined,
+  RollbackOutlined,
   SwapOutlined,
   UploadOutlined,
   UserOutlined,
@@ -62,6 +63,10 @@ export default function AssetDetail() {
   const [replaceSubmitting, setReplaceSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Version | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  // 回滚到某个历史版本
+  const [rollbackTarget, setRollbackTarget] = useState<Version | null>(null)
+  const [rollbackChangelog, setRollbackChangelog] = useState('')
+  const [rollbackSubmitting, setRollbackSubmitting] = useState(false)
   // 修改版本说明
   const [changelogTarget, setChangelogTarget] = useState<Version | null>(null)
   const [changelogText, setChangelogText] = useState('')
@@ -156,6 +161,23 @@ export default function AssetDetail() {
       message.error(e.response?.data?.detail || '删除失败')
     } finally {
       setDeleteSubmitting(false)
+    }
+  }
+
+  // 回滚：以旧版本的文件新建一版，版本号照常递增
+  const doRollback = async () => {
+    if (!rollbackTarget) return
+    setRollbackSubmitting(true)
+    try {
+      await api.rollbackVersion(rollbackTarget.id, rollbackChangelog.trim())
+      message.success('已按该版本新建一版')
+      setRollbackTarget(null)
+      setRollbackChangelog('')
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '回滚失败')
+    } finally {
+      setRollbackSubmitting(false)
     }
   }
 
@@ -354,6 +376,12 @@ export default function AssetDetail() {
                               icon: <EditOutlined />,
                               label: '修改说明',
                             },
+                            {
+                              key: 'rollback',
+                              icon: <RollbackOutlined />,
+                              label: '回滚到此版本',
+                              disabled: !!v.is_latest,
+                            },
                             { key: 'replace', icon: <SwapOutlined />, label: '换源' },
                             {
                               key: 'delete',
@@ -367,6 +395,9 @@ export default function AssetDetail() {
                             if (key === 'changelog') {
                               setChangelogTarget(v)
                               setChangelogText(v.changelog || '')
+                            } else if (key === 'rollback') {
+                              setRollbackTarget(v)
+                              setRollbackChangelog('')
                             } else if (key === 'replace') {
                               setReplaceTarget(v)
                               setReplaceFile([])
@@ -526,6 +557,29 @@ export default function AssetDetail() {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             版本号、下载次数与评论都会保留，只把文件换成新的。
           </Typography.Text>
+        </Space>
+      </Modal>
+
+      {/* 回滚：以该版本的文件新建一版，老版本保留 */}
+      <Modal
+        title={`回滚到 v${rollbackTarget?.version ?? ''}`}
+        open={!!rollbackTarget}
+        onOk={doRollback}
+        onCancel={() => setRollbackTarget(null)}
+        confirmLoading={rollbackSubmitting}
+        okText="回滚"
+        cancelText="取消"
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            会把 v{rollbackTarget?.version} 的文件复制成一个新版本（版本号照常递增），
+            v{rollbackTarget?.version} 本身仍然保留，不会丢。
+          </Typography.Text>
+          <Input
+            value={rollbackChangelog}
+            onChange={(e) => setRollbackChangelog(e.target.value)}
+            placeholder={`版本说明（可选，留空则写「回滚到 v${rollbackTarget?.version ?? ''}」）`}
+          />
         </Space>
       </Modal>
 

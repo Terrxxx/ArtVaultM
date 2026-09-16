@@ -38,12 +38,19 @@ import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
 import Leaderboard from '../components/Leaderboard'
+import TrashDrawer from '../components/TrashDrawer'
 import UploadAssetModal from '../components/UploadAssetModal'
+
+// 资产列表一页多少个；资产多时只渲染这一页，其余的按需加载
+const ASSET_PAGE = 48
 
 function ProjectDetailView({ project: initial }: { project: Project }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [project, setProject] = useState(initial)
   const [assets, setAssets] = useState<Asset[]>([])
+  // 还有没有下一页（上一条正好取满一页就认为可能有）
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   // 当前所在文件夹：0 = 项目根目录。初值取自 ?folder=，从资产页返回时才能落回原目录
   const [folderId, setFolderId] = useState(() => Number(searchParams.get('folder')) || 0)
   const [q, setQ] = useState('')
@@ -55,6 +62,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [rankDays, setRankDays] = useState(30)
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
+  const [trashOpen, setTrashOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [folderSubmitting, setFolderSubmitting] = useState(false)
@@ -95,9 +103,15 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       ])
       setProject(fresh)
       setSubscribed(subs.some((s) => s.target_type === 'project' && s.target_id === project.id))
-      const params: Record<string, unknown> = { folder_id: folderId }
+      const params: Record<string, unknown> = {
+        folder_id: folderId,
+        limit: ASSET_PAGE,
+        offset: 0,
+      }
       if (q) params.q = q
-      setAssets(await api.listAssets(project.id, params))
+      const first = await api.listAssets(project.id, params)
+      setAssets(first)
+      setHasMore(first.length === ASSET_PAGE)
     } catch (e: any) {
       message.error(e.response?.data?.detail || '加载失败')
     } finally {
@@ -164,6 +178,25 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     if (!c) break
     chain.unshift(c)
     cursor = c.parent_id || 0
+  }
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const params: Record<string, unknown> = {
+        folder_id: folderId,
+        limit: ASSET_PAGE,
+        offset: assets.length,
+      }
+      if (q) params.q = q
+      const more = await api.listAssets(project.id, params)
+      setAssets((prev) => [...prev, ...more])
+      setHasMore(more.length === ASSET_PAGE)
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '加载失败')
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
   const toggleSubscribe = async () => {
@@ -410,7 +443,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           />
           {isMember ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
-              上传资产
+              新建资产
             </Button>
           ) : (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -426,6 +459,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               }}
             >
               新建文件夹
+            </Button>
+          )}
+          {canManageFolder && (
+            <Button icon={<DeleteOutlined />} onClick={() => setTrashOpen(true)}>
+              回收站
             </Button>
           )}
         </Space>
@@ -456,6 +494,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             style={{ marginTop: 60 }}
           />
         ) : (
+          <>
           <Row gutter={[16, 16]}>
             {childFolders.map((c) => {
               const hovering = overFolder === c.id
@@ -598,6 +637,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               </Col>
             ))}
           </Row>
+          {hasMore && (
+            <div style={{ textAlign: 'center', marginTop: 4 }}>
+              <Button loading={loadingMore} onClick={loadMore}>
+                加载更多
+              </Button>
+            </div>
+          )}
+          </>
         )}
         </Space>
 
@@ -615,6 +662,13 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           />
         </div>
       </div>
+
+      <TrashDrawer
+        open={trashOpen}
+        projectId={project.id}
+        onClose={() => setTrashOpen(false)}
+        onChanged={load}
+      />
 
       <UploadAssetModal
         open={uploadOpen}
