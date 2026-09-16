@@ -116,7 +116,7 @@ export default function ModelViewer({ url }: { url: string }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#f2f3f5',
+          background: 'var(--av-surface)',
         }}
       >
         {loading && !error && <Spin />}

@@ -155,19 +155,19 @@ export default function AssetEdit() {
                         <img
                           src={cover}
                           alt="cover"
-                          style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee' }}
+                          style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--av-border)' }}
                         />
                       ) : (
                         <div
                           style={{
                             width: 72,
                             height: 72,
-                            background: '#f5f5f5',
+                            background: 'var(--av-surface)',
                             borderRadius: 4,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#ccc',
+                            color: 'var(--av-icon-muted)',
                             fontSize: 12,
                           }}
                         >

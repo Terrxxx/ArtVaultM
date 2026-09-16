@@ -1,3 +1,51 @@
+/*
+ * 主题变量：白色（默认）/ 黑色两套，由 <html data-theme="..."> 切换。
+ * 组件里不要写死颜色，用 var(--av-*)，否则暗色下会花。
+ */
+:root {
+  --av-primary: #6c5ce7;
+  --av-bg: #f5f6f8;
+  --av-header-bg: #ffffff;
+  --av-text: #1f2329;
+  --av-text-2: #555555;
+  --av-text-3: #999999;
+  --av-border: #eeeeee;
+  --av-surface: #f0f0f0;
+  --av-icon-muted: #c0c0c0;
+  --av-accent: #1677ff;
+  --av-accent-bg: #e6f4ff;
+  --av-folder-bg: #fffbe6;
+  --av-folder-fg: #f5b400;
+  --av-unread-bg: #f6f5ff;
+  --av-heat-0: #ebedf0;
+  --av-heat-1: #d9d5f5;
+  --av-heat-2: #b3a8ea;
+  --av-heat-3: #8a79dd;
+  --av-heat-4: #6c5ce7;
+}
+
+[data-theme='dark'] {
+  --av-primary: #8a79dd;
+  --av-bg: #141414;
+  --av-header-bg: #1f1f1f;
+  --av-text: #e6e6e6;
+  --av-text-2: #a6a6a6;
+  --av-text-3: #8c8c8c;
+  --av-border: #303030;
+  --av-surface: #2a2a2a;
+  --av-icon-muted: #595959;
+  --av-accent: #4096ff;
+  --av-accent-bg: #1b3a5c;
+  --av-folder-bg: #3b3320;
+  --av-folder-fg: #d9a326;
+  --av-unread-bg: #2b2547;
+  --av-heat-0: #2a2a2a;
+  --av-heat-1: #3b3363;
+  --av-heat-2: #5b4bb8;
+  --av-heat-3: #7a68d0;
+  --av-heat-4: #9b8ae8;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -6,8 +54,8 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  background: #f5f6f8;
-  color: #1f2329;
+  background: var(--av-bg);
+  color: var(--av-text);
 }
 
 #root {

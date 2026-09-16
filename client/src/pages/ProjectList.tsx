@@ -89,7 +89,7 @@ export default function ProjectList() {
       >
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
           <Space align="center" size={8} style={{ width: '100%' }}>
-            <FolderOutlined style={{ fontSize: 22, color: '#6c5ce7' }} />
+            <FolderOutlined style={{ fontSize: 22, color: 'var(--av-primary)' }} />
             <Typography.Text strong style={{ fontSize: 16, flex: 1 }}>
               {p.name}
             </Typography.Text>

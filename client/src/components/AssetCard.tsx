@@ -33,7 +33,7 @@ export default function AssetCard({ asset, draggable = false, onDragStart, onDra
                 style={{
                   height: 150,
                   overflow: 'hidden',
-                  background: '#f0f0f0',
+                  background: 'var(--av-surface)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -53,8 +53,8 @@ export default function AssetCard({ asset, draggable = false, onDragStart, onDra
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: '#f0f0f0',
-                  color: '#c0c0c0',
+                  background: 'var(--av-surface)',
+                  color: 'var(--av-icon-muted)',
                 }}
               >
                 <FileOutlined style={{ fontSize: 44 }} />

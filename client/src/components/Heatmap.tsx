@@ -6,7 +6,7 @@ const GAP = 3
 const ROWS = 7
 
 // 0 次 + 4 档强度
-const COLORS = ['#ebedf0', '#d9d5f5', '#b3a8ea', '#8a79dd', '#6c5ce7']
+const COLORS = ['var(--av-heat-0)', 'var(--av-heat-1)', 'var(--av-heat-2)', 'var(--av-heat-3)', 'var(--av-heat-4)']
 
 /** 「最近一年」的哨兵值（滚动 12 个月），其余值为具体年份 */
 export const RECENT = 'recent'
@@ -123,7 +123,7 @@ export default function Heatmap({
                     height: CELL,
                     borderRadius: 2,
                     background: c.future || !c.inRange ? 'transparent' : COLORS[level(c.count)],
-                    outline: selected ? '2px solid #6c5ce7' : 'none',
+                    outline: selected ? '2px solid var(--av-primary)' : 'none',
                     outlineOffset: 1,
                     cursor: c.inRange ? 'pointer' : 'default',
                   }}

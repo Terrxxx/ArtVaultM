@@ -116,7 +116,7 @@ export default function UserProfilePage() {
           onSelectDay={(d) => setSelectedDate((prev) => (prev === d ? null : d))}
           loading={loading}
         />
-        <div style={{ marginTop: 20, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+        <div style={{ marginTop: 20, borderTop: '1px solid var(--av-border)', paddingTop: 16 }}>
           <UpdateLog
             items={updates}
             date={selectedDate}

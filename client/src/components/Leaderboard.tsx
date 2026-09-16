@@ -13,7 +13,7 @@ export const RANK_WINDOWS = [
 
 // 前三名的柱色（金银铜），其余用主题色
 const TOP_COLORS = ['#f5a623', '#b8c2cc', '#cd7f32']
-const BAR_COLOR = '#6c5ce7'
+const BAR_COLOR = 'var(--av-primary)'
 const CHART_HEIGHT = 150
 // 柱子区可用高度（上面要给数字标签留位置）
 const BAR_AREA = CHART_HEIGHT - 26
@@ -113,12 +113,12 @@ export default function Leaderboard({
                   size={22}
                   icon={<UserOutlined />}
                   src={it.user.avatar_url || undefined}
-                  style={{ border: `2px solid ${TOP_COLORS[index] || '#e6e6e6'}` }}
+                  style={{ border: `2px solid ${TOP_COLORS[index] || 'var(--av-border)'}` }}
                 />
                 <div
                   style={{
                     fontSize: 11,
-                    color: '#666',
+                    color: 'var(--av-text-2)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',

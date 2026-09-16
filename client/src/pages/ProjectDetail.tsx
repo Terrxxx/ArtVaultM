@@ -313,9 +313,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     cursor: 'pointer',
     padding: '2px 6px',
     borderRadius: 4,
-    color: folderId === id ? '#1677ff' : undefined,
+    color: folderId === id ? 'var(--av-accent)' : undefined,
     fontWeight: folderId === id ? 600 : undefined,
-    background: overFolder === id ? '#e6f4ff' : undefined,
+    background: overFolder === id ? 'var(--av-accent-bg)' : undefined,
   })
 
   return (
@@ -332,10 +332,10 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#fff',
-          border: '1px solid #1677ff',
+          background: 'var(--av-header-bg)',
+          border: '1px solid var(--av-accent)',
           borderRadius: 8,
-          color: '#1677ff',
+          color: 'var(--av-accent)',
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
         }}
       >
@@ -433,7 +433,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           </span>
           {chain.map((c) => (
             <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#bbb' }}>/</span>
+              <span style={{ color: 'var(--av-text-3)' }}>/</span>
               <span {...dropHandlers(c.id)} onClick={() => gotoFolder(c.id)} style={crumbStyle(c.id)}>
                 {c.name}
               </span>
@@ -474,17 +474,17 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                       <Card
                         hoverable
                         styles={{ body: { padding: 12 } }}
-                        style={{ borderColor: hovering ? '#1677ff' : undefined }}
+                        style={{ borderColor: hovering ? 'var(--av-accent)' : undefined }}
                         cover={
                           <div
                             style={{
                               height: 150,
                               position: 'relative',
-                              background: hovering ? '#e6f4ff' : '#fffbe6',
+                              background: hovering ? 'var(--av-accent-bg)' : 'var(--av-folder-bg)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              color: hovering ? '#1677ff' : '#f5b400',
+                              color: hovering ? 'var(--av-accent)' : 'var(--av-folder-fg)',
                             }}
                           >
                             {hovering ? (
@@ -501,7 +501,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                                   right: 0,
                                   textAlign: 'center',
                                   fontSize: 12,
-                                  color: '#1677ff',
+                                  color: 'var(--av-accent)',
                                 }}
                               >
                                 释放以移入

@@ -123,13 +123,13 @@ export default function AssetDetail() {
                 <div
                   style={{
                     height: 260,
-                    background: '#f0f0f0',
+                    background: 'var(--av-surface)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 8,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#c0c0c0',
+                    color: 'var(--av-icon-muted)',
                   }}
                 >
                   <FileOutlined style={{ fontSize: 56 }} />
@@ -268,7 +268,7 @@ export default function AssetDetail() {
                             height: 42,
                             objectFit: 'cover',
                             borderRadius: 4,
-                            border: '1px solid #eee',
+                            border: '1px solid var(--av-border)',
                           }}
                         />
                       ) : undefined

@@ -127,7 +127,7 @@ export default function Notifications() {
                   onClick={() => onClickItem(n)}
                   style={{
                     padding: '12px 16px',
-                    background: n.is_read ? undefined : '#f6f5ff',
+                    background: n.is_read ? undefined : 'var(--av-unread-bg)',
                     cursor: 'pointer',
                   }}
                 >

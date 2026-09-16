@@ -13,7 +13,7 @@ function renderContent(text: string) {
   const parts = text.split(/(@[^\s@，。,.!！?？、]+)/g)
   return parts.map((p, i) =>
     p.startsWith('@') ? (
-      <Typography.Text key={i} style={{ color: '#6c5ce7', fontWeight: 500 }}>
+      <Typography.Text key={i} style={{ color: 'var(--av-primary)', fontWeight: 500 }}>
         {p}
       </Typography.Text>
     ) : (
@@ -81,7 +81,7 @@ function MentionInput({
       {query !== null && options.length > 0 && (
         <List
           size="small"
-          style={{ marginTop: 6, border: '1px solid #eee', borderRadius: 4, maxHeight: 180, overflow: 'auto' }}
+          style={{ marginTop: 6, border: '1px solid var(--av-border)', borderRadius: 4, maxHeight: 180, overflow: 'auto' }}
           dataSource={options}
           renderItem={(u) => (
             <List.Item style={{ cursor: 'pointer', padding: '6px 10px' }} onClick={() => insert(u)}>
@@ -209,7 +209,7 @@ export default function CommentSection({ assetId, versions }: Props) {
             </Space>
 
             {(replies.length > 0 || replyTo === c.id) && (
-              <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid #eee' }}>
+              <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--av-border)' }}>
                 {replies.map((r) => (
                   <div key={r.id} style={{ marginBottom: 8 }}>
                     <Space size={8} wrap>
