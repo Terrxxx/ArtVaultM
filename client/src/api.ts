@@ -165,6 +165,9 @@ export const api = {
   /** 换源：替换某个已有版本的文件，版本号与下载数不变 */
   replaceVersionSource: (versionId: number, form: FormData) =>
     client.post<Version>(`/versions/${versionId}/source`, form).then((r) => r.data),
+  /** 只改版本说明，不动文件 */
+  updateVersionChangelog: (versionId: number, changelog: string) =>
+    client.patch<Version>(`/versions/${versionId}`, { changelog }).then((r) => r.data),
   deleteVersion: (versionId: number) =>
     client.delete(`/versions/${versionId}`).then((r) => r.data),
   downloadStats: (assetId: number) =>
@@ -185,14 +188,15 @@ export const api = {
     client.post<{ liked: boolean; like_count: number }>(`/assets/${assetId}/like`).then((r) => r.data),
 
   // ---------- 评论 ----------
-  listComments: (assetId: number, versionId?: number) =>
+  /** version 传版本号（如 3），只返回正文里 @ 到该版本的评论 */
+  listComments: (assetId: number, version?: number) =>
     client
       .get<Comment[]>(`/assets/${assetId}/comments`, {
-        params: versionId != null ? { version_id: versionId } : {},
+        params: version != null ? { version } : {},
       })
       .then((r) => r.data),
-  addComment: (assetId: number, content: string, parent_id?: number, version_id?: number) =>
-    client.post<Comment>(`/assets/${assetId}/comments`, { content, parent_id, version_id }).then((r) => r.data),
+  addComment: (assetId: number, content: string, parent_id?: number) =>
+    client.post<Comment>(`/assets/${assetId}/comments`, { content, parent_id }).then((r) => r.data),
   deleteComment: (id: number) => client.delete(`/comments/${id}`).then((r) => r.data),
 
   // ---------- 订阅 ----------

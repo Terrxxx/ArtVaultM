@@ -5,21 +5,30 @@ import { api } from '../api'
 import type { Comment, UserBrief, Version } from '../types'
 import { useAuthStore } from '../store'
 
-// 0 作为「全部版本 / 不指定版本」的哨兵值
+// 0 作为「全部版本」的哨兵值
 const ALL = 0
+// 正文里的 @v1 表示这条评论指向 v1，可以同时写多个
+const VERSION_REF = /^@v\d+$/
 
-/** 把正文里的 @提及 高亮显示 */
+/** 把正文里的 @v版本号 与 @提及 高亮显示 */
 function renderContent(text: string) {
-  const parts = text.split(/(@[^\s@，。,.!！?？、]+)/g)
-  return parts.map((p, i) =>
-    p.startsWith('@') ? (
+  const parts = text.split(/(@v\d+|@[^\s@，。,.!！?？、]+)/g)
+  return parts.map((p, i) => {
+    if (VERSION_REF.test(p)) {
+      return (
+        <Typography.Text key={i} code style={{ fontSize: 'inherit' }}>
+          {p}
+        </Typography.Text>
+      )
+    }
+    return p.startsWith('@') ? (
       <Typography.Text key={i} style={{ color: 'var(--av-primary)', fontWeight: 500 }}>
         {p}
       </Typography.Text>
     ) : (
       <span key={i}>{p}</span>
-    ),
-  )
+    )
+  })
 }
 
 /** 带 @联想 的输入框 */
@@ -75,9 +84,6 @@ function MentionInput({
         onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
       />
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        输入 @ 可以提及他人，被提及的人会收到消息
-      </Typography.Text>
       {query !== null && options.length > 0 && (
         <List
           size="small"
@@ -108,8 +114,8 @@ interface Props {
 export default function CommentSection({ assetId, versions }: Props) {
   const [comments, setComments] = useState<Comment[]>([])
   const [content, setContent] = useState('')
+  // 按版本号筛选（正文里 @v1 的那个 1），不是版本 id
   const [filterVersion, setFilterVersion] = useState<number>(ALL)
-  const [formVersion, setFormVersion] = useState<number>(ALL)
   const [replyTo, setReplyTo] = useState<number | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -117,11 +123,7 @@ export default function CommentSection({ assetId, versions }: Props) {
 
   const filterOptions = [
     { value: ALL, label: '全部版本' },
-    ...versions.map((v) => ({ value: v.id, label: `v${v.version}` })),
-  ]
-  const formOptions = [
-    { value: ALL, label: '不指定版本（对资产整体）' },
-    ...versions.map((v) => ({ value: v.id, label: `v${v.version}` })),
+    ...versions.map((v) => ({ value: v.version, label: `v${v.version}` })),
   ]
 
   const load = async () => {
@@ -136,11 +138,6 @@ export default function CommentSection({ assetId, versions }: Props) {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId, filterVersion])
-
-  const onFilterChange = (value: number) => {
-    setFilterVersion(value)
-    setFormVersion(value)
-  }
 
   const onDelete = async (id: number) => {
     try {
@@ -157,17 +154,11 @@ export default function CommentSection({ assetId, versions }: Props) {
     setSubmitting(true)
     try {
       if (parentId != null) {
-        // 回复不传版本，后端自动跟随被回复评论的版本
         await api.addComment(assetId, text.trim(), parentId)
         setReplyContent('')
         setReplyTo(null)
       } else {
-        await api.addComment(
-          assetId,
-          text.trim(),
-          undefined,
-          formVersion === ALL ? undefined : formVersion,
-        )
+        await api.addComment(assetId, text.trim())
         setContent('')
       }
       load()
@@ -189,7 +180,11 @@ export default function CommentSection({ assetId, versions }: Props) {
           <div style={{ flex: 1 }}>
             <Space size={8} wrap>
               <Typography.Text strong>{c.user.nickname || c.user.username}</Typography.Text>
-              {c.version != null && <Tag color="blue">v{c.version}</Tag>}
+              {c.versions.map((n) => (
+                <Tag key={n} color="blue">
+                  v{n}
+                </Tag>
+              ))}
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {fmtTime(c.created_at)}
               </Typography.Text>
@@ -215,7 +210,11 @@ export default function CommentSection({ assetId, versions }: Props) {
                     <Space size={8} wrap>
                       <Avatar size="small" icon={<UserOutlined />} src={r.user.avatar_url || undefined} />
                       <Typography.Text strong>{r.user.nickname || r.user.username}</Typography.Text>
-                      {r.version != null && <Tag color="blue">v{r.version}</Tag>}
+                      {r.versions.map((n) => (
+                        <Tag key={n} color="blue">
+                          v{n}
+                        </Tag>
+                      ))}
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {fmtTime(r.created_at)}
                       </Typography.Text>
@@ -251,13 +250,16 @@ export default function CommentSection({ assetId, versions }: Props) {
     <div>
       <Space style={{ marginBottom: 16 }} wrap>
         <Typography.Text type="secondary">查看版本：</Typography.Text>
-        <Select style={{ minWidth: 160 }} value={filterVersion} onChange={onFilterChange} options={filterOptions} />
+        <Select style={{ minWidth: 160 }} value={filterVersion} onChange={setFilterVersion} options={filterOptions} />
       </Space>
 
       <div style={{ marginBottom: 20 }}>
-        <MentionInput value={content} onChange={setContent} placeholder="写下你的评论…" />
+        <MentionInput
+          value={content}
+          onChange={setContent}
+          placeholder="写下你的评论…  用 @v1 指向具体版本"
+        />
         <Space style={{ marginTop: 8 }} wrap>
-          <Select style={{ minWidth: 200 }} value={formVersion} onChange={setFormVersion} options={formOptions} />
           <Button type="primary" loading={submitting} onClick={() => submit()}>
             发表评论
           </Button>

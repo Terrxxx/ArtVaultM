@@ -64,6 +64,10 @@ export default function AssetDetail() {
   const [replaceSubmitting, setReplaceSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Version | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  // 修改版本说明
+  const [changelogTarget, setChangelogTarget] = useState<Version | null>(null)
+  const [changelogText, setChangelogText] = useState('')
+  const [changelogSubmitting, setChangelogSubmitting] = useState(false)
   const user = useAuthStore((s) => s.user)
   const navigate = useNavigate()
 
@@ -159,6 +163,22 @@ export default function AssetDetail() {
     }
   }
 
+  // 只改版本说明，不动文件
+  const saveChangelog = async () => {
+    if (!changelogTarget) return
+    setChangelogSubmitting(true)
+    try {
+      await api.updateVersionChangelog(changelogTarget.id, changelogText.trim())
+      message.success('已更新版本说明')
+      setChangelogTarget(null)
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '保存失败')
+    } finally {
+      setChangelogSubmitting(false)
+    }
+  }
+
   // 返回项目时落回该资产所在的文件夹，而不是项目根目录
   const projectHref = `${projectPath({
     id: asset.project_id,
@@ -200,12 +220,6 @@ export default function AssetDetail() {
                 </div>
               )}
             </Card>
-            <Typography.Text
-              type="secondary"
-              style={{ fontSize: 12, display: 'block', marginTop: 6, textAlign: 'center' }}
-            >
-              资产封面{canWrite ? ' · 可在「编辑资产」中更换' : ''}
-            </Typography.Text>
           </Col>
           <Col xs={24} md={14}>
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -322,6 +336,11 @@ export default function AssetDetail() {
                         trigger={['click']}
                         menu={{
                           items: [
+                            {
+                              key: 'changelog',
+                              icon: <EditOutlined />,
+                              label: '修改说明',
+                            },
                             { key: 'replace', icon: <SwapOutlined />, label: '换源' },
                             {
                               key: 'delete',
@@ -332,7 +351,10 @@ export default function AssetDetail() {
                             },
                           ],
                           onClick: ({ key }) => {
-                            if (key === 'replace') {
+                            if (key === 'changelog') {
+                              setChangelogTarget(v)
+                              setChangelogText(v.changelog || '')
+                            } else if (key === 'replace') {
                               setReplaceTarget(v)
                               setReplaceFile([])
                               setReplaceChangelog('')
@@ -497,6 +519,24 @@ export default function AssetDetail() {
         </Space>
       </Modal>
 
+      {/* 修改版本说明 */}
+      <Modal
+        title={`修改说明 · v${changelogTarget?.version ?? ''}`}
+        open={!!changelogTarget}
+        onOk={saveChangelog}
+        onCancel={() => setChangelogTarget(null)}
+        confirmLoading={changelogSubmitting}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Input.TextArea
+          rows={3}
+          value={changelogText}
+          onChange={(e) => setChangelogText(e.target.value)}
+          placeholder="这一版改了什么，留空表示清空说明"
+        />
+      </Modal>
+
       {/* 删除历史版本 */}
       <Modal
         title={`删除版本 v${deleteTarget?.version ?? ''}`}
@@ -509,7 +549,7 @@ export default function AssetDetail() {
         okButtonProps={{ danger: true }}
       >
         <Typography.Text type="danger">
-          该版本的文件与缩略图会被删除，不可恢复；它下面的评论会变成不带版本的通用评论。
+          该版本的文件与缩略图会被删除，不可恢复。引用它的评论正文不受影响。
         </Typography.Text>
       </Modal>
     </div>

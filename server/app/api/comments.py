@@ -1,15 +1,24 @@
-from typing import Optional
+from typing import List, Optional
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Asset, AssetVersion, Comment, User
+from ..models import Asset, Comment, User
 from ..schemas import CommentCreate
 from ..services import notify
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
+
+# 正文里写 @v1 就表示这条评论指向 v1；可以同时写多个
+VERSION_REF = re.compile(r"@v(\d+)")
+
+
+def parse_version_refs(content: str) -> List[int]:
+    """从评论正文里解析出被 @ 到的版本号，去重并按从小到大排序。"""
+    return sorted({int(n) for n in VERSION_REF.findall(content or "")})
 
 
 def comment_to_dict(c: Comment) -> dict:
@@ -17,8 +26,7 @@ def comment_to_dict(c: Comment) -> dict:
         "id": c.id,
         "asset_id": c.asset_id,
         "parent_id": c.parent_id,
-        "version_id": c.version_id,
-        "version": c.version.version if c.version else None,
+        "versions": parse_version_refs(c.content),
         "content": c.content,
         "user": {
             "id": c.user.id,
@@ -33,7 +41,7 @@ def comment_to_dict(c: Comment) -> dict:
 @router.get("/assets/{asset_id}/comments")
 def list_comments(
     asset_id: int,
-    version_id: Optional[int] = None,
+    version: Optional[int] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -42,16 +50,16 @@ def list_comments(
         raise HTTPException(status_code=404, detail="资产不存在")
     ensure_project_access(db, asset.project_id, user)
 
-    query = (
+    comments = (
         db.query(Comment)
-        .options(joinedload(Comment.user), joinedload(Comment.version))
+        .options(joinedload(Comment.user))
         .filter(Comment.asset_id == asset_id)
+        .order_by(Comment.created_at)
+        .all()
     )
-    # 传入 version_id 则只看该版本的评论；不传则返回全部
-    if version_id is not None:
-        query = query.filter(Comment.version_id == version_id)
-
-    comments = query.order_by(Comment.created_at).all()
+    # 传入 version（版本号）则只看 @ 到该版本的评论；不传则返回全部
+    if version is not None:
+        comments = [c for c in comments if version in parse_version_refs(c.content)]
     return [comment_to_dict(c) for c in comments]
 
 
@@ -67,27 +75,16 @@ def add_comment(
         raise HTTPException(status_code=404, detail="资产不存在")
     ensure_project_access(db, asset.project_id, user)
 
-    version_id = payload.version_id
     parent = None
-
     if payload.parent_id is not None:
         parent = db.get(Comment, payload.parent_id)
         if parent is None or parent.asset_id != asset_id:
             raise HTTPException(status_code=400, detail="回复的评论不存在")
-        # 回复默认跟随被回复评论所属的版本
-        if version_id is None:
-            version_id = parent.version_id
-
-    if version_id is not None:
-        version = db.get(AssetVersion, version_id)
-        if version is None or version.asset_id != asset_id:
-            raise HTTPException(status_code=400, detail="版本不存在或不属于该资产")
 
     comment = Comment(
         asset_id=asset_id,
         user_id=user.id,
         parent_id=payload.parent_id,
-        version_id=version_id,
         content=payload.content,
     )
     db.add(comment)
@@ -110,8 +107,9 @@ def add_comment(
         ):
             notified.add(user_id)
 
-    # 1) 被 @ 提及的人
-    for mentioned in notify.extract_mentions(db, payload.content, exclude_user_id=user.id):
+    # 1) 被 @ 提及的人（@v1 这种版本引用不算提及）
+    mention_text = VERSION_REF.sub("", payload.content)
+    for mentioned in notify.extract_mentions(db, mention_text, exclude_user_id=user.id):
         _notify(mentioned.id, "mention", f"在「{asset.name}」的评论中提到了你：{payload.content[:120]}")
 
     # 2) 被回复的评论作者

@@ -135,8 +135,8 @@ export interface Comment {
   id: number
   asset_id: number
   parent_id?: number | null
-  version_id?: number | null
-  version?: number | null
+  /** 正文里 @v1 引用到的版本号，可以同时有多个 */
+  versions: number[]
   content: string
   user: UserBrief
   created_at?: string

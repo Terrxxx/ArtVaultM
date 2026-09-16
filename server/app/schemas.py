@@ -121,4 +121,7 @@ class FolderUpdate(BaseModel):
 class CommentCreate(BaseModel):
     content: str = Field(min_length=1)
     parent_id: Optional[int] = None
-    version_id: Optional[int] = None
+
+
+class VersionChangelogUpdate(BaseModel):
+    changelog: Optional[str] = None

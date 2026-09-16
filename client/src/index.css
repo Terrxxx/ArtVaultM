@@ -24,26 +24,28 @@
   --av-heat-4: #6c5ce7;
 }
 
+/* 暗色 = GitHub 深色模式调色板（canvas / border / fg / accent 取其官方值） */
 [data-theme='dark'] {
-  --av-primary: #8a79dd;
-  --av-bg: #141414;
-  --av-header-bg: #1f1f1f;
-  --av-text: #e6e6e6;
-  --av-text-2: #a6a6a6;
-  --av-text-3: #8c8c8c;
-  --av-border: #303030;
-  --av-surface: #2a2a2a;
-  --av-icon-muted: #595959;
-  --av-accent: #4096ff;
-  --av-accent-bg: #1b3a5c;
-  --av-folder-bg: #3b3320;
-  --av-folder-fg: #d9a326;
-  --av-unread-bg: #2b2547;
-  --av-heat-0: #2a2a2a;
-  --av-heat-1: #3b3363;
-  --av-heat-2: #5b4bb8;
-  --av-heat-3: #7a68d0;
-  --av-heat-4: #9b8ae8;
+  --av-primary: #58a6ff;
+  --av-bg: #0d1117;
+  --av-header-bg: #161b22;
+  --av-text: #e6edf3;
+  --av-text-2: #8b949e;
+  --av-text-3: #6e7681;
+  --av-border: #30363d;
+  --av-surface: #21262d;
+  --av-icon-muted: #484f58;
+  --av-accent: #58a6ff;
+  --av-accent-bg: #388bfd26;
+  --av-folder-bg: #bb800926;
+  --av-folder-fg: #d29922;
+  --av-unread-bg: #1f6feb1a;
+  /* 暗色下热力图用 GitHub 贡献图的绿色梯度 */
+  --av-heat-0: #161b22;
+  --av-heat-1: #0e4429;
+  --av-heat-2: #006d32;
+  --av-heat-3: #26a641;
+  --av-heat-4: #39d353;
 }
 
 * {

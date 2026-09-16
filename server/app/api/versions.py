@@ -11,7 +11,8 @@ from ..core.security import (
     decode_stream_token,
 )
 from ..database import get_db
-from ..models import Asset, AssetVersion, Comment, DownloadLog, User
+from ..models import Asset, AssetVersion, DownloadLog, User
+from ..schemas import VersionChangelogUpdate
 from ..serializers import version_to_dict
 from ..services import notify, storage, storage_config
 from .deps import ensure_project_access, get_current_user
@@ -384,6 +385,25 @@ def replace_version_source(
     return version_to_dict(version)
 
 
+@router.patch("/versions/{version_id}")
+def update_version_changelog(
+    version_id: int,
+    payload: VersionChangelogUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """只改版本说明，不动文件。"""
+    version = db.get(AssetVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    ensure_project_access(db, version.asset.project_id, user, write=True)
+
+    version.changelog = payload.changelog
+    db.commit()
+    db.refresh(version)
+    return version_to_dict(version)
+
+
 @router.delete("/versions/{version_id}")
 def delete_version(
     version_id: int,
@@ -398,10 +418,6 @@ def delete_version(
     if version.is_latest:
         raise HTTPException(status_code=400, detail="不能删除最新版本，请先上传新版本")
 
-    # 该版本下的评论降级为通用评论，避免悬空引用
-    db.query(Comment).filter(Comment.version_id == version_id).update(
-        {Comment.version_id: None}
-    )
     _delete_version_files(db, version, storage_config.cos_params(db))
 
     db.delete(version)

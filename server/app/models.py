@@ -192,13 +192,12 @@ class Comment(Base):
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
-    version_id = Column(Integer, ForeignKey("asset_versions.id"), nullable=True)
+    # 指向哪个版本写在正文里（@v1），不再单独存字段；沿用下来的 version_id 列已弃用
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     asset = relationship("Asset", back_populates="comments")
     user = relationship("User")
-    version = relationship("AssetVersion")
 
 
 class Favorite(Base):
