@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Form, Input, Modal, Select, Space, Tag, Typography, Upload, message } from 'antd'
-import { InboxOutlined } from '@ant-design/icons'
+import type { UploadFile } from 'antd'
+import { DeleteOutlined, InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
 import { clearUploadSession, needsChunkedUpload, uploadFileInChunks } from '../uploader'
 import type { Category } from '../types'
@@ -46,6 +47,9 @@ export default function UploadAssetModal({
 }: Props) {
   const [form] = Form.useForm()
   const [rows, setRows] = useState<Row[]>([])
+  // Upload 自己的文件列表要由我们托管：否则关掉弹窗后它内部还留着旧文件，
+  // 再次打开时一选文件就会把上次取消的那些一起带回来
+  const [fileList, setFileList] = useState<UploadFile[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   // 只有一个文件时，才让填描述和单独传缩略图
@@ -54,11 +58,13 @@ export default function UploadAssetModal({
   const close = () => {
     form.resetFields()
     setRows([])
+    setFileList([])
     onClose()
   }
 
   // 选完文件后按 uid 保留已填的名字，去掉的文件直接丢掉
-  const onFilesChange = (list: any[]) => {
+  const onFilesChange = (list: UploadFile[]) => {
+    setFileList(list)
     setRows((prev) => {
       const byUid = new Map(prev.map((r) => [r.uid, r]))
       return list
@@ -68,11 +74,17 @@ export default function UploadAssetModal({
             byUid.get(f.uid) ?? {
               uid: f.uid,
               file: f.originFileObj as File,
-              name: defaultAssetName(f.name || f.originFileObj.name),
+              name: defaultAssetName(f.name || (f.originFileObj as File).name),
               status: 'pending' as const,
             },
         )
     })
+  }
+
+  /** 这一条不传了：文件列表和行一起摘掉 */
+  const removeRow = (uid: string) => {
+    setFileList((prev) => prev.filter((f) => f.uid !== uid))
+    setRows((prev) => prev.filter((r) => r.uid !== uid))
   }
 
   const setName = (uid: string, name: string) =>
@@ -188,8 +200,9 @@ export default function UploadAssetModal({
           <Upload.Dragger
             multiple
             showUploadList={false}
+            fileList={fileList}
             beforeUpload={() => false}
-            onChange={({ fileList }) => onFilesChange(fileList)}
+            onChange={({ fileList: list }) => onFilesChange(list)}
           >
             <p className="ant-upload-drag-icon">
               <InboxOutlined />
@@ -230,6 +243,15 @@ export default function UploadAssetModal({
                       </Tag>
                     )}
                   </div>
+                  {/* 已完成的留着（重试时跳过），不然「上传 N 个」的计数会对不上 */}
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    title="这个不传了"
+                    disabled={submitting || r.status === 'done'}
+                    onClick={() => removeRow(r.uid)}
+                  />
                 </div>
               ))}
             </Space>
