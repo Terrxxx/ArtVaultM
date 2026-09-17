@@ -44,9 +44,14 @@ import ArtSpin from '../components/ArtSpin'
 
 // 版本历史默认展示的条数
 const VERSION_PREVIEW = 4
-// 封面固定 3:2 横图：图片按这个尺寸裁切填满，不随栏宽变大变小
+// 封面 3:2 横图：列宽固定 540，屏幕放不下时由 maxWidth 压到容器宽度
 const COVER_WIDTH = 540
 const COVER_HEIGHT = 360
+// 尺寸交给列定，图自己撑满列宽；比例靠 aspectRatio 保持
+const COVER_BOX: React.CSSProperties = {
+  width: '100%',
+  aspectRatio: `${COVER_WIDTH} / ${COVER_HEIGHT}`,
+}
 
 export default function AssetDetail() {
   const { id } = useParams()
@@ -225,25 +230,19 @@ export default function AssetDetail() {
           </Button>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Row gutter={16}>
-            {/* 列宽自适应封面，封面内尺寸固定，保证正好 3:2 */}
-            <Col flex="0 0 auto">
+            {/* 封面列固定 540 宽，窄屏由 maxWidth 压到容器宽度，比例交给 aspectRatio */}
+            <Col flex={`0 0 ${COVER_WIDTH}px`} style={{ maxWidth: '100%' }}>
               <Card styles={{ body: { padding: 0 } }}>
                 {coverSrc ? (
                   <img
                     src={coverSrc}
                     alt={asset.name}
-                    style={{
-                      width: COVER_WIDTH,
-                      height: COVER_HEIGHT,
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
+                    style={{ ...COVER_BOX, objectFit: 'cover', display: 'block' }}
                   />
                 ) : (
                   <div
                     style={{
-                      width: COVER_WIDTH,
-                      height: COVER_HEIGHT,
+                      ...COVER_BOX,
                       background: 'var(--av-surface)',
                       display: 'flex',
                       flexDirection: 'column',
@@ -349,6 +348,7 @@ export default function AssetDetail() {
                 const rowThumb = rowThumbOf(v)
                 return (
                 <List.Item
+                  className="av-version-item"
                   actions={[
                     <Button
                       key="pv"

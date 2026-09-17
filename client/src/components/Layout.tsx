@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Avatar, Badge, Button, Dropdown, Layout as AntLayout, Space } from 'antd'
+import { Avatar, Badge, Button, Dropdown, Grid, Layout as AntLayout, Space } from 'antd'
 import {
   BellOutlined,
   DatabaseOutlined,
@@ -34,6 +34,10 @@ export default function Layout() {
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
   const isAdmin = isAdminLike(user?.role)
+  // 窄屏（<768）收起文字：顶栏在手机上塞不下 logo 文字 + 昵称，留着会被压成竖排
+  // （初值是 {}，所以用 === false 判断，免得宽屏首帧抖一下）
+  const screens = Grid.useBreakpoint()
+  const narrow = screens.md === false
 
   // 登录态是持久化的，角色/昵称可能已被管理员改动，进入应用时拉一次最新资料
   useEffect(() => {
@@ -78,32 +82,41 @@ export default function Layout() {
           justifyContent: 'space-between',
           background: 'var(--av-header-bg)',
           borderBottom: '1px solid var(--av-border)',
-          paddingInline: 24,
+          paddingInline: narrow ? 12 : 24,
           height: 56,
           lineHeight: '56px',
         }}
       >
-        <Space size={28} align="center">
+        <Space size={narrow ? 14 : 28} align="center">
           <Link to="/" style={{ fontSize: 20, fontWeight: 700, color: 'var(--av-primary)' }}>
-            <DatabaseOutlined /> 艺库{' '}
-            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--av-text-3)' }}>ArtVault</span>
+            <DatabaseOutlined />
+            {!narrow && (
+              <>
+                {' '}
+                艺库{' '}
+                <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--av-text-3)' }}>
+                  ArtVault
+                </span>
+              </>
+            )}
           </Link>
           <a
             href="https://github.com/Terrxxx/ArtVaultM"
             target="_blank"
             rel="noreferrer"
             title="GitHub 仓库"
-            style={{ fontSize: 20, color: 'var(--av-text-2)', lineHeight: 1 }}
+            style={{ fontSize: 20, color: 'var(--av-text-2)', lineHeight: 1, flexShrink: 0 }}
           >
             <GithubOutlined />
           </a>
-          <nav style={{ display: 'flex', gap: 20, fontSize: 15 }}>
+          {/* nowrap + 不收缩：flex 子项被压缩时文字会自己换行，手机上会变成竖排 */}
+          <nav style={{ display: 'flex', gap: narrow ? 14 : 20, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>
             <Link to="/">项目</Link>
             {isAdmin && <Link to="/console">管理后台</Link>}
           </nav>
         </Space>
 
-        <Space size={20} align="center">
+        <Space size={narrow ? 12 : 20} align="center" style={{ flexShrink: 0 }}>
           <Dropdown
             trigger={['click']}
             menu={{
@@ -146,7 +159,7 @@ export default function Layout() {
           >
             <Space style={{ cursor: 'pointer' }}>
               <Avatar size="small" icon={<UserOutlined />} src={user?.avatar_url || undefined} />
-              <span>{user?.nickname || user?.username}</span>
+              {!narrow && <span>{user?.nickname || user?.username}</span>}
             </Space>
           </Dropdown>
         </Space>

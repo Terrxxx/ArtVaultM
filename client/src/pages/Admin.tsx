@@ -212,7 +212,15 @@ function UserManager({ me }: { me: User | null }) {
           注册账号
         </Button>
       </div>
-      <Table rowKey="id" columns={columns} dataSource={users} loading={loading} pagination={false} />
+      {/* 列宽合计超出屏幕时让表格自己横滑，别把整页撑宽 */}
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={users}
+        loading={loading}
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+      />
 
       <Modal
         title="注册账号"
@@ -401,7 +409,14 @@ function ProjectManager() {
           message="管理员可以查看全部项目（含他人私有项目），但只有高级管理员可以编辑。"
         />
       )}
-      <Table rowKey="id" columns={columns} dataSource={projects} loading={loading} pagination={false} />
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={projects}
+        loading={loading}
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+      />
     </>
   )
 }

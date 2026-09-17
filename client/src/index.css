@@ -172,11 +172,38 @@ body.av-wide .av-content {
   }
 }
 
-/* 项目页屏幕不够宽时中间内容先占满一行，两栏并排落到下面 */
+/* 项目页屏幕不够宽时中间内容先占满一行，两条侧栏落到下面并与主体等宽 */
 @media (max-width: 1120px) {
   .av-side-main {
     flex: 1 1 100%;
     order: -1;
+  }
+
+  /* 项目页是 flex 布局：只给 width:100% 会被 flex-basis 压回 260/240，和主体不对齐 */
+  .av-rail-left,
+  .av-rail-right {
+    flex: 1 1 100%;
+    max-width: 1200px;
+  }
+}
+
+/* 手机（顶栏的文字收起由 Layout.tsx 按 768 断点处理，这里只管列表和卡片的观感） */
+@media (max-width: 768px) {
+  /* 热力图竖向 53 周太长，手机上看不出所以然；个人页和项目页的右栏里装的都是它 */
+  .av-rail-right {
+    display: none;
+  }
+
+  /* 版本行：动作按钮排到下面并允许换行，正文不再被挤成窄条 */
+  .av-version-item.ant-list-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .av-version-item .ant-list-item-action {
+    margin-inline-start: 0;
+    flex-wrap: wrap;
   }
 }
 

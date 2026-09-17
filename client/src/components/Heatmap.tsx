@@ -210,6 +210,8 @@ export default function Heatmap({
         padding: 8,
         opacity: loading ? 0.4 : 1,
         alignSelf: 'flex-start',
+        // flex 子项默认 min-width:auto，横向模式（716px 宽）会撑破父容器而 overflowX 永不生效
+        minWidth: 0,
       }}
     >
       {vertical ? (

@@ -373,6 +373,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     color: folderId === id ? 'var(--av-accent)' : undefined,
     fontWeight: folderId === id ? 600 : undefined,
     background: overFolder === id ? 'var(--av-accent-bg)' : undefined,
+    // 长文件夹名别把整行撑宽：超出省略（外层已经允许换行）
+    maxWidth: 200,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   })
 
   return (
@@ -462,12 +467,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         </Space>
         {project.description && <Typography.Text type="secondary">{project.description}</Typography.Text>}
 
-        <Space wrap>
+        {/* 用普通 flex 而不是 Space：Space 的子项是收缩宽度，百分比宽度在里面算不出来，
+            手机上搜索框（定宽 380）会撑破页面 */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <Input.Search
             placeholder="搜索资产名 / 描述 / 标签 / 文件名 / 上传者"
             allowClear
             enterButton={<SearchOutlined />}
-            style={{ width: 380 }}
+            style={{ flex: '1 1 380px', maxWidth: 380, minWidth: 0 }}
             onSearch={setQ}
           />
           {isMember ? (
@@ -498,7 +505,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           <Button icon={<DownloadOutlined />} onClick={downloadZip}>
             打包下载
           </Button>
-        </Space>
+        </div>
 
         {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
@@ -529,7 +536,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             {childFolders.map((c) => {
               const hovering = overFolder === c.id
               return (
-                <Col xs={12} sm={8} lg={6} key={`folder-${c.id}`}>
+                <Col xs={24} sm={8} lg={6} key={`folder-${c.id}`}>
                   <div
                     style={{
                       position: 'relative',

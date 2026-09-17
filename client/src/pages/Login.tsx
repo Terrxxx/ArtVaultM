@@ -33,10 +33,11 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: 16,
         background: 'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)',
       }}
     >
-      <Card style={{ width: 380, boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }}>
+      <Card style={{ width: 'min(380px, 100%)', boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Typography.Title level={3} style={{ marginBottom: 0 }}>
             艺库 ArtVault

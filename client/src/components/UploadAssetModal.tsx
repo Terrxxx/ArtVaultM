@@ -215,17 +215,22 @@ export default function UploadAssetModal({
           <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
             <Space direction="vertical" size={8} style={{ width: '100%' }}>
               {rows.map((r) => (
-                <div key={r.uid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                // 窄屏放不下时让文件名换到下一行，别把名称输入框挤成一条缝
+                <div
+                  key={r.uid}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+                >
                   <Input
                     value={r.name}
                     onChange={(e) => setName(r.uid, e.target.value)}
                     placeholder="资产名称"
                     status={r.status === 'error' ? 'error' : undefined}
                     disabled={r.status === 'done' || submitting}
+                    style={{ flex: '1 1 160px', minWidth: 0 }}
                   />
                   <Typography.Text
                     type="secondary"
-                    style={{ fontSize: 12, width: 120, flexShrink: 0, textAlign: 'right' }}
+                    style={{ fontSize: 12, flex: '0 1 auto', maxWidth: 160, textAlign: 'right' }}
                     ellipsis={{ tooltip: r.file.name }}
                   >
                     {r.file.name}
