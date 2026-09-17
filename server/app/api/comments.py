@@ -8,7 +8,7 @@ from ..database import get_db
 from ..models import Asset, Comment, User
 from ..schemas import CommentCreate
 from ..serializers import user_brief
-from ..services import badges, notify
+from ..services import badges, clock, notify
 from .deps import ensure_project_access, get_current_user
 
 router = APIRouter()
@@ -31,7 +31,7 @@ def comment_to_dict(c: Comment) -> dict:
         "content": c.content,
         # 用 user_brief：里面才有 avatar_url（前端要拿它显示头像）
         "user": user_brief(c.user),
-        "created_at": c.created_at.isoformat() if c.created_at else None,
+        "created_at": clock.fmt_dt(c.created_at),
     }
 
 

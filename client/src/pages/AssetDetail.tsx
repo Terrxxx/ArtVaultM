@@ -35,6 +35,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, downloadVersion, formatSize, projectPath, userPath } from '../api'
+import { fmtDateTime } from '../timefmt'
 import type { Asset, Version } from '../types'
 import CommentSection from '../components/CommentSection'
 import OnlinePreview, { previewKind } from '../components/OnlinePreview'
@@ -461,7 +462,7 @@ export default function AssetDetail() {
                             <Typography.Text type="secondary">未知</Typography.Text>
                           )}
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            上传于 {v.created_at ? new Date(v.created_at).toLocaleString() : ''}
+                            上传于 {fmtDateTime(v.created_at)}
                           </Typography.Text>
                         </Space>
                       </Space>

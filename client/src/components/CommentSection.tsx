@@ -3,6 +3,7 @@ import { Avatar, Button, Empty, Input, List, Popconfirm, Popover, Select, Space,
 import { SmileOutlined, UserOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { api, userPath } from '../api'
+import { fmtDateTime } from '../timefmt'
 import type { Comment, UserBrief, Version } from '../types'
 import { useAuthStore } from '../store'
 
@@ -256,7 +257,7 @@ export default function CommentSection({ assetId, versions }: Props) {
     }
   }
 
-  const fmtTime = (t?: string) => (t ? new Date(t).toLocaleString() : '')
+  const fmtTime = (t?: string) => fmtDateTime(t)
 
   const renderItem = (c: Comment) => {
     const replies = comments.filter((r) => r.parent_id === c.id)

@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict, user_brief
-from ..services import badges, chunked_upload, notify, storage, storage_config, trash
+from ..services import badges, chunked_upload, clock, notify, storage, storage_config, trash
 from ..services.permissions import can_delete_asset, can_manage_trash, can_move_asset
 from .deps import ensure_project_access, get_current_user
 
@@ -428,7 +428,7 @@ def _trash_item(asset: Asset, viewer: User) -> dict:
         "creator": user_brief(asset.creator),
         "version_count": len(asset.versions),
         "cover_thumbnail_url": storage.display_url(cover_path, cover_storage),
-        "deleted_at": asset.deleted_at.isoformat() if asset.deleted_at else None,
+        "deleted_at": clock.fmt_dt(asset.deleted_at),
         "deleted_from_folder_id": asset.deleted_from_folder_id,
         "can_manage": can_manage_trash(asset, viewer),
     }

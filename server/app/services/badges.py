@@ -25,7 +25,7 @@ from ..models import (
     User,
     UserBadge,
 )
-from . import notify, trash
+from . import clock, notify, trash
 
 MB = 1024 * 1024
 
@@ -325,8 +325,7 @@ def compute(db: Session, user_id: int) -> List[dict]:
                     "value": min(value, target),
                     "unlocked": unlocked,
                     "hidden": hidden,
-                    # 带 Z：库里存的是 naive UTC，标明后前端才能换算成本地日期
-                    "unlocked_at": stamp.isoformat() + "Z" if stamp else None,
+                    "unlocked_at": clock.fmt_dt(stamp),
                 },
             )
         )

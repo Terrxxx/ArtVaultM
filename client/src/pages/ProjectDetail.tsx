@@ -687,6 +687,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             vertical
             days={activity?.days || []}
             years={activity?.years || []}
+            today={activity?.today}
             value={year}
             onChange={setYear}
           />

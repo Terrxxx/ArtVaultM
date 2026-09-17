@@ -4,6 +4,7 @@ import { DeleteOutlined, FileOutlined, UndoOutlined } from '@ant-design/icons'
 import { api, userPath } from '../api'
 import type { TrashItem } from '../types'
 import { Link } from 'react-router-dom'
+import { fmtShort } from '../timefmt'
 import ArtSpin from './ArtSpin'
 
 interface Props {
@@ -15,11 +16,7 @@ interface Props {
 }
 
 function fmtTime(t?: string | null): string {
-  if (!t) return ''
-  const d = new Date(t)
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(
-    d.getMinutes(),
-  ).padStart(2, '0')}`
+  return fmtShort(t)
 }
 
 export default function TrashDrawer({ open, projectId, onClose, onChanged }: Props) {

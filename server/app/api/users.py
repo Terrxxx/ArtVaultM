@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Asset, User
 from ..serializers import asset_to_dict, user_brief
-from ..services import badges, stats
+from ..services import badges, clock, stats
 from .deps import get_current_user
 
 router = APIRouter()
@@ -142,7 +142,8 @@ def user_activity_by_username(
     years = stats.activity_years(db, user_id=target.id)
     chosen = stats.normalize_year(year, years)
     payload = stats.daily_counts(db, chosen, user_id=target.id)
-    return {"years": years, "year": chosen, "days": payload}
+    # today 由服务端给：热力图的最后一列要对齐服务器日期，不能看客户端时钟
+    return {"years": years, "year": chosen, "days": payload, "today": clock.today().isoformat()}
 
 
 @router.get("/users/by-username/{username}/updates")

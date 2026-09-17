@@ -3,6 +3,7 @@ import { Avatar, Card, Col, Empty, Pagination, Row, Space, Spin, Statistic, Tag,
 import { GithubOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { fmtDay } from '../timefmt'
 import type { ActivityResponse, UpdateItem, UserProfile } from '../types'
 import AssetCard from '../components/AssetCard'
 import Heatmap, { RECENT } from '../components/Heatmap'
@@ -142,7 +143,7 @@ export default function UserProfilePage() {
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {b.unlocked
                     ? b.unlocked_at
-                      ? `解锁于 ${new Date(b.unlocked_at).toLocaleDateString()}`
+                      ? `解锁于 ${fmtDay(b.unlocked_at)}`
                       : '已解锁'
                     : `${b.desc}（${b.value}/${b.target}）`}
                 </Typography.Text>
@@ -250,6 +251,7 @@ export default function UserProfilePage() {
           vertical
           days={activity?.days || []}
           years={activity?.years || []}
+          today={activity?.today}
           value={year}
           onChange={(v) => {
             setYear(v)

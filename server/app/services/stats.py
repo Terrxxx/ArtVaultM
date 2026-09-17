@@ -21,7 +21,7 @@ from ..models import (
     User,
 )
 from ..serializers import user_brief
-from . import storage
+from . import clock, storage
 
 # 热度权重
 W_ASSETS = 2.0  # 每个资产
@@ -59,7 +59,7 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
         .all()
     )
     # 近期更新：近 RECENT_DAYS 天内新增的版本数
-    since = datetime.utcnow() - timedelta(days=RECENT_DAYS)
+    since = clock.now_utc() - timedelta(days=RECENT_DAYS)
     recent_counts = dict(
         db.query(Asset.project_id, func.count(AssetVersion.id))
         .join(AssetVersion, AssetVersion.asset_id == Asset.id)
@@ -118,7 +118,7 @@ def activity_years(
     """有更新记录的年份列表（注册/建项目那年至今）。"""
     query = _base_version_query(db, project_id, user_id)
     earliest = query.with_entities(func.min(AssetVersion.created_at)).scalar()
-    current = datetime.utcnow().year
+    current = clock.today().year
     if earliest is None:
         return [current]
     start = earliest.year if isinstance(earliest, datetime) else int(str(earliest)[:4])
@@ -136,16 +136,25 @@ def normalize_year(selector, years: List[int]) -> str:
 
 
 def year_range(selector) -> tuple:
-    """把年份选择器转成时间区间。
+    """把年份选择器转成查询用的 UTC 区间。
+
+    边界按**服务器本地日期**切，再换算回 UTC 去和库里存的 UTC 值比较；
+    热力图的分格与更新日志的「看某一天」都用这套边界，两边才对得上。
 
     "recent" / None → 滚动最近 12 个月（GitHub 默认视图）
     具体年份        → 该自然年
     """
     if selector in (None, "", "recent"):
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        return today - timedelta(days=364), today + timedelta(days=1)
+        today = clock.today()
+        return (
+            clock.local_midnight(today - timedelta(days=364)),
+            clock.local_midnight(today + timedelta(days=1)),
+        )
     year = int(selector)
-    return datetime(year, 1, 1), datetime(year + 1, 1, 1)
+    return (
+        clock.local_midnight(date(year, 1, 1)),
+        clock.local_midnight(date(year + 1, 1, 1)),
+    )
 
 
 def daily_counts(
@@ -154,10 +163,14 @@ def daily_counts(
     project_id: Optional[int] = None,
     user_id: Optional[int] = None,
 ) -> List[dict]:
-    """某个时间区间内按天的更新次数（热力图数据）。"""
+    """某个时间区间内按天的更新次数（热力图数据）。
+
+    分格按服务器本地日期（前端热力图的格子也是本地日期），所以这里把 UTC
+    时间戳按本地偏移挪一天再取日期。
+    """
     start, end = year_range(year)
 
-    day = func.date(AssetVersion.created_at)
+    day = func.date(AssetVersion.created_at, *clock.sqlite_day_mods())
     rows = (
         _base_version_query(db, project_id, user_id)
         .filter(AssetVersion.created_at >= start, AssetVersion.created_at < end)
@@ -181,7 +194,7 @@ def uploader_ranking(
     - project_id 指定时只统计该项目（项目内贡献榜）
     - visible_project_ids 为 None 表示不限；否则只统计这些项目（避免泄露私有项目活跃度）
     """
-    since = datetime.utcnow() - timedelta(days=days)
+    since = clock.now_utc() - timedelta(days=days)
 
     query = (
         db.query(AssetVersion.uploader_id, func.count(AssetVersion.id).label("n"))
@@ -231,7 +244,7 @@ def project_ids_visible_to(db: Session, viewer: User) -> Optional[List[int]]:
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
-    return dt.isoformat() if dt else None
+    return clock.fmt_dt(dt)
 
 
 def update_log(
@@ -250,10 +263,11 @@ def update_log(
     query = _base_version_query(db, project_id, user_id)
 
     if on_date is not None:
-        start = datetime(on_date.year, on_date.month, on_date.day)
+        start = clock.local_midnight(on_date)
+        end = clock.local_midnight(on_date + timedelta(days=1))
         query = query.filter(
             AssetVersion.created_at >= start,
-            AssetVersion.created_at < start + timedelta(days=1),
+            AssetVersion.created_at < end,
         )
 
     rows = (

@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..models import StorageConfig
+from . import clock
 
 MASK = "********"
 CONFIG_ID = 1
@@ -34,7 +35,7 @@ def read_config(db: Session) -> dict:
         "cos_bucket": c.cos_bucket,
         "cos_app_id": c.cos_app_id,
         "cos_prefix": c.cos_prefix,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "updated_at": clock.fmt_dt(c.updated_at),
     }
 
 

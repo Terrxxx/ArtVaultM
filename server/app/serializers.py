@@ -1,7 +1,7 @@
 from typing import Optional
 
 from .models import Asset, AssetVersion, Category, Folder, Project, ProjectMember, User
-from .services import storage
+from .services import clock, storage
 from .services.folders import subtree_counts
 from .services.permissions import (
     can_contribute,
@@ -32,8 +32,8 @@ def user_out(u: User) -> dict:
         **user_brief(u),
         "role": u.role,
         "status": u.status,
-        "deleted_at": u.deleted_at.isoformat() if u.deleted_at else None,
-        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "deleted_at": clock.fmt_dt(u.deleted_at),
+        "created_at": clock.fmt_dt(u.created_at),
     }
 
 
@@ -56,7 +56,7 @@ def version_to_dict(v: AssetVersion) -> dict:
         "is_latest": v.is_latest,
         "download_count": len(v.downloads),
         "uploader": user_brief(v.uploader),
-        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "created_at": clock.fmt_dt(v.created_at),
     }
 
 
@@ -101,7 +101,7 @@ def asset_to_dict(
         "project_name": a.project.name if a.project else None,
         "project_slug": a.project.slug if a.project else None,
         "project_owner": user_brief(a.project.owner) if a.project else None,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "created_at": clock.fmt_dt(a.created_at),
         "version_count": len(a.versions),
         "latest_version": version_to_dict(latest) if latest else None,
         "like_count": len(a.likes),
@@ -164,7 +164,7 @@ def member_to_dict(m: ProjectMember) -> dict:
         "id": m.id,
         "user": user_brief(m.user),
         "status": m.status,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "created_at": clock.fmt_dt(m.created_at),
     }
 
 
@@ -188,7 +188,7 @@ def project_to_dict(
         "is_archived": bool(p.is_archived),
         "owner_id": p.owner_id,
         "owner": user_brief(p.owner),
-        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "created_at": clock.fmt_dt(p.created_at),
         "asset_count": sum(1 for a in p.assets if a.deleted_at is None),
         "category_count": len(p.categories),
         "folder_count": len(p.folders),

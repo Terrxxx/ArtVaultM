@@ -20,6 +20,7 @@ import {
 import { DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, projectPath } from '../api'
+import { fmtDateTime } from '../timefmt'
 import type { AdminProject, StorageConfig, User } from '../types'
 import { isSuperAdmin, ROLE_LABEL } from '../types'
 import { useAuthStore } from '../store'
@@ -165,7 +166,7 @@ function UserManager({ me }: { me: User | null }) {
       title: '创建时间',
       dataIndex: 'created_at',
       width: 170,
-      render: (v: string) => (v ? new Date(v).toLocaleString() : '-'),
+      render: (v: string) => fmtDateTime(v) || '-',
     },
     {
       title: '操作',
@@ -523,7 +524,7 @@ function StoragePanel() {
         </Space>
         {cfg?.updated_at && (
           <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
-            上次更新：{new Date(cfg.updated_at).toLocaleString()}
+            上次更新：{fmtDateTime(cfg.updated_at)}
           </Typography.Text>
         )}
       </Form>

@@ -1,15 +1,8 @@
 import { Button, Empty, List, Space, Tag, Typography } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
+import { fmtShort } from '../timefmt'
 import type { UpdateItem } from '../types'
-
-function fmtTime(t?: string | null): string {
-  if (!t) return ''
-  const d = new Date(t)
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(
-    d.getMinutes(),
-  ).padStart(2, '0')}`
-}
 
 /** 行为说明：v1 是这条资产第一次上传，之后都是新版本 */
 function actionOf(it: UpdateItem): string {
@@ -74,7 +67,7 @@ export default function UpdateLog({
                   <Tag>私有</Tag>
                   <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {fmtTime(it.created_at)}
+                    {fmtShort(it.created_at)}
                   </Typography.Text>
                 </Space>
               </List.Item>
@@ -96,7 +89,7 @@ export default function UpdateLog({
                     <Typography.Text strong>{it.asset_name || '资产'}</Typography.Text>
                   </Space>
                   <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                    {fmtTime(it.created_at)}
+                    {fmtShort(it.created_at)}
                   </Typography.Text>
                 </div>
                 {/* 右边：版本号 + 跳转按钮 */}

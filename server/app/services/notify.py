@@ -3,6 +3,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from ..models import Notification, Subscription, User
+from . import clock
 
 
 def add_notification(
@@ -113,5 +114,5 @@ def notification_to_dict(n: Notification) -> dict:
             if n.actor
             else None
         ),
-        "created_at": n.created_at.isoformat() if n.created_at else None,
+        "created_at": clock.fmt_dt(n.created_at),
     }

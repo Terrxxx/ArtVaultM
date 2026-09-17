@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, DownloadLog, User
 from ..schemas import VersionChangelogUpdate
 from ..serializers import version_to_dict
-from ..services import badges, notify, storage, storage_config
+from ..services import badges, clock, notify, storage, storage_config
 from .assets import take_staged
 from .deps import ensure_project_access, get_current_user
 
@@ -551,7 +551,7 @@ def download_stats(
                 "avatar": u.avatar,
             },
             "version": dl.asset_version.version if dl.asset_version else None,
-            "created_at": dl.created_at.isoformat() if dl.created_at else None,
+            "created_at": clock.fmt_dt(dl.created_at),
         }
         for dl, u in recent_rows
     ]

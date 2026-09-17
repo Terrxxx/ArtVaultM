@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
 from ..serializers import project_to_dict
-from ..services import badges, stats
+from ..services import badges, clock, stats
 from ..services.asset_types import seed_default_categories
 from ..services.slug import slugify
 from .deps import (
@@ -158,6 +158,8 @@ def project_activity(
         "years": years,
         "year": chosen,
         "days": stats.daily_counts(db, chosen, project_id=project_id),
+        # 同个人页：热力图最后一列按服务器日期对齐
+        "today": clock.today().isoformat(),
     }
 
 

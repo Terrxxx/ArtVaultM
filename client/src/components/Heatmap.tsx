@@ -38,11 +38,20 @@ function fmt(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** 计算展示区间；「最近一年」是滚动 53 周，具体年份是自然年 */
-function rangeOf(year: string | number): { start: Date; end: Date } {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+/** 'YYYY-MM-DD' → 本地零点。直接 new Date(str) 会按 UTC 零点解析，负时区下星期几会差一天 */
+function parseDay(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
+/** 兜底用的客户端当天：仅在活动数据还没到、格子里本来也没内容时才会用到 */
+function clientToday(): Date {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+/** 计算展示区间；「最近一年」是滚动 53 周，具体年份是自然年 */
+function rangeOf(year: string | number, today: Date): { start: Date; end: Date } {
   if (year === RECENT) {
     return { start: new Date(today.getTime() - 364 * 86400000), end: today }
   }
@@ -51,18 +60,15 @@ function rangeOf(year: string | number): { start: Date; end: Date } {
   return { start: new Date(y, 0, 1), end: new Date(y, 11, 31) }
 }
 
-function buildCells(days: ActivityItem[], year: string | number) {
+function buildCells(days: ActivityItem[], year: string | number, today: Date) {
   const counts = new Map(days.map((d) => [d.date, d.count]))
-  const { start, end } = rangeOf(year)
+  const { start, end } = rangeOf(year, today)
 
   // 向前补到周日、向后补到周六，保证每列是完整的一周
   const gridStart = new Date(start)
   gridStart.setDate(gridStart.getDate() - gridStart.getDay())
   const gridEnd = new Date(end)
   gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()))
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
 
   const cells: { date: string; count: number; inRange: boolean; future: boolean }[] = []
   const cursor = new Date(gridStart)
@@ -83,8 +89,8 @@ function buildCells(days: ActivityItem[], year: string | number) {
 function monthLabelsOf(cells: { date: string }[]): (string | null)[] {
   const labels: (string | null)[] = []
   for (let i = 0; i < cells.length; i += ROWS) {
-    const d = new Date(cells[i].date)
-    const prev = i >= ROWS ? new Date(cells[i - ROWS].date) : null
+    const d = parseDay(cells[i].date)
+    const prev = i >= ROWS ? parseDay(cells[i - ROWS].date) : null
     labels.push(!prev || prev.getMonth() !== d.getMonth() ? MONTH_LABELS[d.getMonth()] : null)
   }
   return labels
@@ -98,6 +104,8 @@ interface Props {
   selectedDate?: string | null
   onSelectDay?: (date: string) => void
   loading?: boolean
+  /** 服务器当天（YYYY-MM-DD）：最后一列和「未来格子」按它算，不信客户端时钟 */
+  today?: string
   /** 竖向：一周 7 天横排、周次自上往下（用于侧栏那种窄而高的位置） */
   vertical?: boolean
 }
@@ -110,9 +118,10 @@ export default function Heatmap({
   selectedDate,
   onSelectDay,
   loading,
+  today,
   vertical = false,
 }: Props) {
-  const cells = buildCells(days, value)
+  const cells = buildCells(days, value, today ? parseDay(today) : clientToday())
   const monthLabels = monthLabelsOf(cells)
   const total = days.reduce((sum, d) => sum + d.count, 0)
 

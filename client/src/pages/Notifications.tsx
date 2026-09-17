@@ -3,6 +3,7 @@ import { Avatar, Button, Card, Empty, List, Space, Tag, Typography, message } fr
 import { TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, userPath } from '../api'
+import { fmtDateTime } from '../timefmt'
 import { useAuthStore } from '../store'
 import type { Invitation, Notification } from '../types'
 
@@ -148,7 +149,7 @@ export default function Notifications() {
                         <Tag color={meta.color}>{meta.text}</Tag>
                         <Typography.Text strong>{n.actor?.nickname || n.actor?.username || '系统'}</Typography.Text>
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                          {fmtDateTime(n.created_at)}
                         </Typography.Text>
                       </Space>
                     }

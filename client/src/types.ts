@@ -280,6 +280,8 @@ export interface ActivityResponse {
   years: number[]
   year: number | string
   days: ActivityItem[]
+  /** 服务器当天（YYYY-MM-DD）：热力图最后一列按它对齐，不看客户端时钟 */
+  today?: string
 }
 
 export const ROLE_LABEL: Record<string, string> = {
