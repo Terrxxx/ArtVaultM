@@ -79,13 +79,21 @@ def subscriber_ids(db: Session, target_type: str, target_id: int) -> List[int]:
     ]
 
 
-def extract_mentions(db: Session, content: str, exclude_user_id: Optional[int] = None) -> List[User]:
-    """从评论内容里解析被 @ 的用户（按昵称或用户名匹配）。"""
+def extract_mentions(
+    db: Session,
+    content: str,
+    exclude_user_id: Optional[int] = None,
+    users: Optional[List[User]] = None,
+) -> List[User]:
+    """从评论内容里解析被 @ 的用户（按昵称或用户名匹配）。
+
+    批量渲染评论时把 users 传进来（一次查好），免得每条评论都扫一遍用户表。
+    """
     if "@" not in content:
         return []
-    users = db.query(User).filter(User.status == "active").all()
+    pool = users if users is not None else db.query(User).filter(User.status == "active").all()
     mentioned: List[User] = []
-    for u in users:
+    for u in pool:
         if exclude_user_id is not None and u.id == exclude_user_id:
             continue
         for token in {u.nickname, u.username}:

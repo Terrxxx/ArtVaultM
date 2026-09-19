@@ -4,6 +4,7 @@ import { SmileOutlined, UserOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { api, userPath } from '../api'
 import { fmtDateTime } from '../timefmt'
+import { isSuperAdmin } from '../types'
 import type { Comment, UserBrief, Version } from '../types'
 import { useAuthStore } from '../store'
 
@@ -58,24 +59,42 @@ function EmojiBar({ onPick }: { onPick: (emoji: string) => void }) {
   )
 }
 
-/** 把正文里的 @v版本号 与 @提及 高亮显示 */
-function renderContent(text: string) {
+/** 把正文里的 @v版本号 与 @提及 高亮显示：@提及 点开对方主页，@vN 点了跳到那一版 */
+function renderContent(
+  text: string,
+  mentions: UserBrief[] | undefined,
+  onSelectVersion?: (version: number) => void,
+) {
   const parts = text.split(/(@v\d+|@[^\s@，。,.!！?？、]+)/g)
   return parts.map((p, i) => {
     if (VERSION_REF.test(p)) {
+      const version = Number(p.slice(2))
       return (
-        <Typography.Text key={i} code style={{ fontSize: 'inherit' }}>
+        <Typography.Text
+          key={i}
+          code
+          style={{ fontSize: 'inherit', cursor: onSelectVersion ? 'pointer' : undefined }}
+          title={onSelectVersion ? `跳到 v${version}` : undefined}
+          onClick={onSelectVersion ? () => onSelectVersion(version) : undefined}
+        >
           {p}
         </Typography.Text>
       )
     }
-    return p.startsWith('@') ? (
-      <Typography.Text key={i} style={{ color: 'var(--av-primary)', fontWeight: 500 }}>
-        {p}
-      </Typography.Text>
-    ) : (
-      <span key={i}>{p}</span>
-    )
+    if (p.startsWith('@')) {
+      const hit = mentions?.find((u) => p === `@${u.nickname}` || p === `@${u.username}`)
+      const label = (
+        <Typography.Text style={{ color: 'var(--av-primary)', fontWeight: 500 }}>{p}</Typography.Text>
+      )
+      return hit ? (
+        <Link key={i} to={userPath(hit)}>
+          {label}
+        </Link>
+      ) : (
+        <span key={i}>{label}</span>
+      )
+    }
+    return <span key={i}>{p}</span>
   })
 }
 
@@ -197,9 +216,11 @@ function MentionInput({
 interface Props {
   assetId: number
   versions: Version[]
+  /** 点评论里的 @v2 时通知外面跳到那一版（在版本列表里高亮） */
+  onSelectVersion?: (version: number) => void
 }
 
-export default function CommentSection({ assetId, versions }: Props) {
+export default function CommentSection({ assetId, versions, onSelectVersion }: Props) {
   const [comments, setComments] = useState<Comment[]>([])
   const [content, setContent] = useState('')
   // 按版本号筛选（正文里 @v1 的那个 1），不是版本 id
@@ -207,6 +228,8 @@ export default function CommentSection({ assetId, versions }: Props) {
   const [replyTo, setReplyTo] = useState<number | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // 收起来的那些回复串（按根评论 id 记）：默认收起，正在回复的那条会强制展开
+  const [collapsedReplies, setCollapsedReplies] = useState<number[]>([])
   const user = useAuthStore((s) => s.user)
 
   const filterOptions = [
@@ -257,12 +280,20 @@ export default function CommentSection({ assetId, versions }: Props) {
     }
   }
 
+  // 回复时自动把 @对方 写进正文：发出去就是「@某人 内容」
+  const startReply = (c: Comment) => {
+    setReplyTo(c.id)
+    setReplyContent(`@${c.user.nickname || c.user.username} `)
+  }
+
   const fmtTime = (t?: string) => fmtDateTime(t)
 
   const renderItem = (c: Comment) => {
     const replies = comments.filter((r) => r.parent_id === c.id)
+    const collapsed = collapsedReplies.includes(c.id)
+    const repliesOpen = !collapsed || replyTo === c.id
     return (
-      <div key={c.id} style={{ marginBottom: 14 }}>
+      <div key={c.id} className="av-comment-card">
         <Space align="start" style={{ width: '100%' }}>
           <Link to={userPath(c.user)} title={c.user.nickname || c.user.username}>
             <Avatar size="small" icon={<UserOutlined />} src={c.user.avatar_url || undefined} />
@@ -272,33 +303,47 @@ export default function CommentSection({ assetId, versions }: Props) {
               <Link to={userPath(c.user)}>
                 <Typography.Text strong>{c.user.nickname || c.user.username}</Typography.Text>
               </Link>
-              {c.versions.map((n) => (
-                <Tag key={n} color="blue">
-                  v{n}
-                </Tag>
-              ))}
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {fmtTime(c.created_at)}
               </Typography.Text>
             </Space>
-            <div>{renderContent(c.content)}</div>
-            <Space size={4} style={{ marginTop: 4 }}>
-              <Button type="link" size="small" onClick={() => { setReplyTo(c.id); setReplyContent('') }}>
+            <div>{renderContent(c.content, c.mentions, onSelectVersion)}</div>
+            <Space size={2} style={{ marginTop: 2 }}>
+              <Button
+                type="text"
+                size="small"
+                style={{ fontSize: 12, color: 'var(--av-text-3)', paddingInline: 6 }}
+                onClick={() => startReply(c)}
+              >
                 回复
               </Button>
-              {user && (user.id === c.user.id || user.role === 'admin') && (
+              {user && (user.id === c.user.id || isSuperAdmin(user.role)) && (
                 <Popconfirm title="删除这条评论？" onConfirm={() => onDelete(c.id)}>
-                  <Button type="link" size="small" danger>
+                  <Button type="text" size="small" danger style={{ fontSize: 12, paddingInline: 6 }}>
                     删除
                   </Button>
                 </Popconfirm>
               )}
+              {replies.length > 0 && (
+                <Button
+                  type="text"
+                  size="small"
+                  style={{ fontSize: 12, color: 'var(--av-text-3)', paddingInline: 6 }}
+                  onClick={() =>
+                    setCollapsedReplies((prev) =>
+                      prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                    )
+                  }
+                >
+                  {repliesOpen ? '收起回复' : `展开 ${replies.length} 条回复`}
+                </Button>
+              )}
             </Space>
 
-            {(replies.length > 0 || replyTo === c.id) && (
-              <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--av-border)' }}>
+            {repliesOpen && (replies.length > 0 || replyTo === c.id) && (
+              <div className="av-comment-replies">
                 {replies.map((r) => (
-                  <div key={r.id} style={{ marginBottom: 8 }}>
+                  <div key={r.id}>
                     <Space size={8} wrap>
                       <Link to={userPath(r.user)} title={r.user.nickname || r.user.username}>
                         <Avatar size="small" icon={<UserOutlined />} src={r.user.avatar_url || undefined} />
@@ -306,16 +351,20 @@ export default function CommentSection({ assetId, versions }: Props) {
                       <Link to={userPath(r.user)}>
                         <Typography.Text strong>{r.user.nickname || r.user.username}</Typography.Text>
                       </Link>
-                      {r.versions.map((n) => (
-                        <Tag key={n} color="blue">
-                          v{n}
-                        </Tag>
-                      ))}
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {fmtTime(r.created_at)}
                       </Typography.Text>
                     </Space>
-                    <div>{renderContent(r.content)}</div>
+                    <div>{renderContent(r.content, r.mentions, onSelectVersion)}</div>
+                    {user && (user.id === r.user.id || isSuperAdmin(user.role)) && (
+                      <Space size={2} style={{ marginTop: 2 }}>
+                        <Popconfirm title="删除这条回复？" onConfirm={() => onDelete(r.id)}>
+                          <Button type="text" size="small" danger style={{ fontSize: 12, paddingInline: 6 }}>
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    )}
                   </div>
                 ))}
                 {replyTo === c.id && (
@@ -324,7 +373,7 @@ export default function CommentSection({ assetId, versions }: Props) {
                       value={replyContent}
                       onChange={setReplyContent}
                       rows={2}
-                      placeholder="回复…"
+                      placeholder={`回复 @${c.user.nickname || c.user.username}`}
                       versions={versions}
                     />
                     <Space style={{ marginTop: 6 }}>
@@ -346,7 +395,8 @@ export default function CommentSection({ assetId, versions }: Props) {
   }
 
   const ids = new Set(comments.map((c) => c.id))
-  const roots = comments.filter((c) => !c.parent_id || !ids.has(c.parent_id))
+  // 接口按时间正序返回；主评论倒过来（最新的在上），回复串内部保持正序才读得顺
+  const roots = comments.filter((c) => !c.parent_id || !ids.has(c.parent_id)).reverse()
 
   return (
     <div>
@@ -378,7 +428,7 @@ export default function CommentSection({ assetId, versions }: Props) {
           image={Empty.PRESENTED_IMAGE_SIMPLE}
         />
       ) : (
-        roots.map(renderItem)
+        <div className="av-comment-scroll">{roots.map(renderItem)}</div>
       )}
     </div>
   )

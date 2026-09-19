@@ -406,6 +406,43 @@ def replace_version_source(
     return version_to_dict(version)
 
 
+@router.post("/versions/{version_id}/thumbnail")
+def set_version_thumbnail(
+    version_id: int,
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """单独给某个版本换缩略图：文件、版本号、下载数都不动。"""
+    version = db.get(AssetVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    asset = version.asset
+    ensure_project_access(db, asset.project_id, user, write=True)
+
+    raw, name = storage.read_upload(file)
+    if not raw:
+        raise HTTPException(status_code=400, detail="请选择图片")
+    try:
+        storage.ensure_image_size(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    cos = storage_config.cos_params(db)
+    saved = storage.save_version_thumbnail(asset.id, version.version, raw, name, cos)
+    if not saved["path"]:
+        raise HTTPException(status_code=400, detail="缩略图保存失败")
+
+    # 旧的删掉，避免在磁盘/COS 上堆积
+    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
+    version.thumbnail = saved["path"]
+    version.thumbnail_storage = saved["storage"]
+
+    db.commit()
+    db.refresh(version)
+    return version_to_dict(version)
+
+
 @router.post("/versions/{version_id}/rollback")
 def rollback_version(
     version_id: int,

@@ -228,6 +228,9 @@ export const api = {
   /** 换源：替换某个已有版本的文件，版本号与下载数不变 */
   replaceVersionSource: (versionId: number, form: FormData) =>
     client.post<Version>(`/versions/${versionId}/source`, form).then((r) => r.data),
+  /** 只换这个版本的缩略图，不动文件 */
+  setVersionThumbnail: (versionId: number, form: FormData) =>
+    client.post<Version>(`/versions/${versionId}/thumbnail`, form).then((r) => r.data),
   /** 只改版本说明，不动文件 */
   updateVersionChangelog: (versionId: number, changelog: string) =>
     client.patch<Version>(`/versions/${versionId}`, { changelog }).then((r) => r.data),

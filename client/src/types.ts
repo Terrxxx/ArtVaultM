@@ -156,6 +156,8 @@ export interface Comment {
   versions: number[]
   content: string
   user: UserBrief
+  /** 正文里 @ 到的人，前端用来把 @昵称 变成主页链接 */
+  mentions?: UserBrief[]
   created_at?: string
 }
 

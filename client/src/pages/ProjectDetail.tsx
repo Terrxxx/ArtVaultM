@@ -12,6 +12,7 @@ import {
   Modal,
   Result,
   Row,
+  Select,
   Space,
   Tag,
   Typography,
@@ -96,6 +97,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  // 移动资产/文件夹弹窗：手机上没法拖拽，走这里选目标文件夹
+  const [moveTarget, setMoveTarget] = useState<
+    { kind: 'asset' | 'folder'; id: number; name: string; from: number } | null
+  >(null)
+  const [moveTo, setMoveTo] = useState<number | null>(null)
+  const [moveSubmitting, setMoveSubmitting] = useState(false)
   const navigate = useNavigate()
 
   // 进/出文件夹时同步 ?folder=，这样刷新、分享、从资产页返回都能落回同一个目录
@@ -271,6 +278,42 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       load()
     } catch (e: any) {
       message.error(e.response?.data?.detail || '移动失败')
+    }
+  }
+
+  // 目标只给两组：上级文件夹（排在最前）和同级的其他文件夹。
+  // 选项直接写文件夹名，不加前缀；平级的天然不在「被移动的文件夹」自己的子树里，不用额外排重。
+  const moveOptions = useMemo(() => {
+    if (!moveTarget) return []
+    const from = moveTarget.from // 当前所在文件夹（0 = 项目根目录）
+    const current = folders.find((f) => f.id === from)
+    const parentId = current ? current.parent_id || 0 : 0
+    const selfId = moveTarget.kind === 'folder' ? moveTarget.id : null
+    const options: { value: number; label: string }[] = []
+
+    // 已经在根目录就没有「上级」可去
+    if (from !== 0) {
+      options.push({ value: parentId, label: '上级文件夹' })
+    }
+
+    folders
+      .filter((f) => (f.parent_id || 0) === parentId && f.id !== from && f.id !== selfId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((f) => options.push({ value: f.id, label: f.name }))
+
+    return options
+  }, [moveTarget, folders])
+
+  const submitMove = async () => {
+    if (!moveTarget || moveTo === null) return
+    setMoveSubmitting(true)
+    try {
+      if (moveTarget.kind === 'asset') await moveAsset(moveTarget.id, moveTo)
+      else await moveFolder(moveTarget.id, moveTo)
+      setMoveTarget(null)
+      setMoveTo(null)
+    } finally {
+      setMoveSubmitting(false)
     }
   }
 
@@ -463,6 +506,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                 编辑项目
               </Button>
             )}
+            {canManageFolder && (
+              <Button size="small" icon={<DeleteOutlined />} onClick={() => setTrashOpen(true)}>
+                回收站
+              </Button>
+            )}
           </Space>
         </Space>
         {project.description && <Typography.Text type="secondary">{project.description}</Typography.Text>}
@@ -495,11 +543,6 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
               }}
             >
               新建文件夹
-            </Button>
-          )}
-          {canManageFolder && (
-            <Button icon={<DeleteOutlined />} onClick={() => setTrashOpen(true)}>
-              回收站
             </Button>
           )}
           <Button icon={<DownloadOutlined />} onClick={downloadZip}>
@@ -623,6 +666,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                               label: '重命名',
                             },
                             {
+                              key: 'move',
+                              icon: <FolderOpenOutlined />,
+                              label: '移动到…',
+                            },
+                            {
                               key: 'delete',
                               icon: <DeleteOutlined />,
                               label: canDeleteFolder(c)
@@ -637,6 +685,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                             if (key === 'rename') {
                               setRenameTarget(c)
                               setRenameName(c.name)
+                            } else if (key === 'move') {
+                              setMoveTarget({
+                                kind: 'folder',
+                                id: c.id,
+                                name: c.name,
+                                from: c.parent_id || 0,
+                              })
+                              setMoveTo(null)
                             } else if (key === 'delete') {
                               requestDeleteFolder(c)
                             }
@@ -665,12 +721,40 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                 key={a.id}
                 style={{ opacity: draggingKey === `asset:${a.id}` ? 0.4 : 1 }}
               >
-                <AssetCard
-                  asset={a}
-                  draggable={canMoveAsset(a)}
-                  onDragStart={(e) => startDrag(e, `asset:${a.id}`, `asset:${a.id}`)}
-                  onDragEnd={endDrag}
-                />
+                {/* ⋯ 放在 Link 外层，免得点它顺带跳进资产页 */}
+                <div style={{ position: 'relative', height: '100%' }}>
+                  <AssetCard
+                    asset={a}
+                    draggable={canMoveAsset(a)}
+                    onDragStart={(e) => startDrag(e, `asset:${a.id}`, `asset:${a.id}`)}
+                    onDragEnd={endDrag}
+                  />
+                  {canMoveAsset(a) && (
+                    <Dropdown
+                      trigger={['click']}
+                      menu={{
+                        items: [{ key: 'move', icon: <FolderOpenOutlined />, label: '移动到…' }],
+                        onClick: () => {
+                          setMoveTarget({
+                            kind: 'asset',
+                            id: a.id,
+                            name: a.name,
+                            from: a.folder_id || 0,
+                          })
+                          setMoveTo(null)
+                        },
+                      }}
+                    >
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<MoreOutlined />}
+                        draggable={false}
+                        style={{ position: 'absolute', bottom: 8, right: 8 }}
+                      />
+                    </Dropdown>
+                  )}
+                </div>
               </Col>
             ))}
           </Row>
@@ -732,6 +816,29 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           onChange={(e) => setFolderName(e.target.value)}
           onPressEnter={createFolder}
           autoFocus
+        />
+      </Modal>
+
+      {/* 移动资产/文件夹：手机上拖不动，用这个入口选目标文件夹 */}
+      <Modal
+        title={`移动「${moveTarget?.name ?? ''}」`}
+        open={!!moveTarget}
+        onOk={submitMove}
+        onCancel={() => {
+          setMoveTarget(null)
+          setMoveTo(null)
+        }}
+        confirmLoading={moveSubmitting}
+        okText="移动"
+        cancelText="取消"
+        okButtonProps={{ disabled: moveTo === null }}
+      >
+        <Select
+          style={{ width: '100%' }}
+          placeholder="选一个目标文件夹"
+          value={moveTo ?? undefined}
+          onChange={setMoveTo}
+          options={moveOptions}
         />
       </Modal>
 

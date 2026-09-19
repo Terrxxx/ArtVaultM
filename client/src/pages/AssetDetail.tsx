@@ -28,6 +28,7 @@ import {
   LikeFilled,
   LikeOutlined,
   MoreOutlined,
+  PictureOutlined,
   RollbackOutlined,
   SwapOutlined,
   UploadOutlined,
@@ -51,6 +52,16 @@ const COVER_HEIGHT = 360
 const COVER_BOX: React.CSSProperties = {
   width: '100%',
   aspectRatio: `${COVER_WIDTH} / ${COVER_HEIGHT}`,
+}
+
+// 版本行左边缩略图的边长
+const ROW_THUMB = 72
+
+/** 版本行显示文件名（去掉扩展名，扩展名由旁边的格式标签表达） */
+function fileStem(name?: string | null): string {
+  const text = name || ''
+  const i = text.lastIndexOf('.')
+  return i > 0 ? text.slice(0, i) : text
 }
 
 export default function AssetDetail() {
@@ -77,6 +88,12 @@ export default function AssetDetail() {
   const [changelogTarget, setChangelogTarget] = useState<Version | null>(null)
   const [changelogText, setChangelogText] = useState('')
   const [changelogSubmitting, setChangelogSubmitting] = useState(false)
+  // 给某个版本单独换缩略图
+  const [thumbTarget, setThumbTarget] = useState<Version | null>(null)
+  const [thumbFile, setThumbFile] = useState<any[]>([])
+  const [thumbSubmitting, setThumbSubmitting] = useState(false)
+  // 评论里点了 @v2 后，把那一版闪一下
+  const [flashVersion, setFlashVersion] = useState<number | null>(null)
   const navigate = useNavigate()
 
   const load = useCallback(async () => {
@@ -118,7 +135,9 @@ export default function AssetDetail() {
   const visibleVersions = expanded ? versions : versions.slice(0, VERSION_PREVIEW)
 
   // 版本列表的缩略图来自该版本自己的文件（只有图片版本有）
-  const rowThumbOf = (v: Version) => v.thumb_small_url || null
+  // 版本行左边的小图：优先这个版本上传的缩略图（够大、放大不糊），
+  // 没有才退回后端从图片文件派生的 42×42 小图
+  const rowThumbOf = (v: Version) => v.thumbnail_url || v.thumb_small_url || null
 
   const toggleLike = async () => {
     const res = await api.toggleLike(assetId)
@@ -129,6 +148,44 @@ export default function AssetDetail() {
     const { subscribed: now } = await api.toggleSubscription('asset', assetId)
     setSubscribed(now)
     message.success(now ? '已订阅该资产更新' : '已取消订阅')
+  }
+
+  // 评论里点 @v2：滚到那一版并闪一下（被折叠起来了才展开列表）
+  const focusVersion = (version: number) => {
+    const idx = versions.findIndex((v) => v.version === version)
+    if (idx < 0) {
+      message.info(`v${version} 已经不在了`)
+      return
+    }
+    if (idx >= VERSION_PREVIEW) setExpanded(true)
+    setFlashVersion(version)
+    window.setTimeout(() => setFlashVersion(null), 1600)
+    // 展开要等下一帧才渲染出来，所以延后一拍再滚
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-version="${version}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+  }
+
+  // 只换这个版本的缩略图，文件与版本号都不动
+  const uploadThumbnail = async () => {
+    const file = thumbFile[0]?.originFileObj
+    if (!thumbTarget || !file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    setThumbSubmitting(true)
+    try {
+      await api.setVersionThumbnail(thumbTarget.id, fd)
+      message.success('缩略图已更新')
+      setThumbTarget(null)
+      setThumbFile([])
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '上传失败')
+    } finally {
+      setThumbSubmitting(false)
+    }
   }
 
   // 换源：把该版本的文件换成新上传的，版本号与下载数不变
@@ -216,7 +273,7 @@ export default function AssetDetail() {
           <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
             评论
           </Typography.Title>
-          <CommentSection assetId={assetId} versions={versions} />
+          <CommentSection assetId={assetId} versions={versions} onSelectVersion={focusVersion} />
         </div>
 
         {/* 主内容 */}
@@ -348,7 +405,12 @@ export default function AssetDetail() {
                 const rowThumb = rowThumbOf(v)
                 return (
                 <List.Item
-                  className="av-version-item"
+                  className={
+                    flashVersion === v.version
+                      ? 'av-version-item av-version-flash'
+                      : 'av-version-item'
+                  }
+                  data-version={v.version}
                   actions={[
                     <Button
                       key="pv"
@@ -364,6 +426,13 @@ export default function AssetDetail() {
                     >
                       下载
                     </Button>,
+                    <Typography.Text
+                      key="meta"
+                      type="secondary"
+                      style={{ fontSize: 12, whiteSpace: 'nowrap' }}
+                    >
+                      下载 {v.download_count} 次
+                    </Typography.Text>,
                     canWrite && (
                       <Dropdown
                         key="more"
@@ -374,6 +443,11 @@ export default function AssetDetail() {
                               key: 'changelog',
                               icon: <EditOutlined />,
                               label: '修改说明',
+                            },
+                            {
+                              key: 'thumbnail',
+                              icon: <PictureOutlined />,
+                              label: '上传缩略图',
                             },
                             {
                               key: 'rollback',
@@ -394,6 +468,9 @@ export default function AssetDetail() {
                             if (key === 'changelog') {
                               setChangelogTarget(v)
                               setChangelogText(v.changelog || '')
+                            } else if (key === 'thumbnail') {
+                              setThumbTarget(v)
+                              setThumbFile([])
                             } else if (key === 'rollback') {
                               setRollbackTarget(v)
                               setRollbackChangelog('')
@@ -419,8 +496,8 @@ export default function AssetDetail() {
                           src={rowThumb}
                           alt={asset.name}
                           style={{
-                            width: 42,
-                            height: 42,
+                            width: ROW_THUMB,
+                            height: ROW_THUMB,
                             objectFit: 'cover',
                             borderRadius: 4,
                             border: '1px solid var(--av-border)',
@@ -429,20 +506,19 @@ export default function AssetDetail() {
                       ) : undefined
                     }
                     title={
-                      <Space wrap>
+                      // 这几个格子挨紧一点（Space size + .av-tag-tight 里把 Tag 自带的右外边距也去掉）
+                      <Space wrap size={4} className="av-tag-tight">
                         {v.is_latest && <Tag color="green">最新</Tag>}
-                        <Typography.Text strong>v{v.version}</Typography.Text>
+                        <Typography.Text strong>{fileStem(v.file_name)}</Typography.Text>
+                        {/* 版本号单独占一个格子，不接在文件名后面 */}
+                        <Tag>v{v.version}</Tag>
                         {v.file_format && <Tag>{v.file_format}</Tag>}
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          下载 {v.download_count} 次
-                        </Typography.Text>
+                        {/* 文件大小也做成格子，跟在扩展名后面 */}
+                        <Tag>{formatSize(v.file_size)}</Tag>
                       </Space>
                     }
                     description={
                       <Space direction="vertical" size={2}>
-                        <Typography.Text type="secondary">
-                          {v.file_name} · {formatSize(v.file_size)}
-                        </Typography.Text>
                         {v.changelog && (
                           <Typography.Text type="secondary">说明：{v.changelog}</Typography.Text>
                         )}
@@ -520,6 +596,42 @@ export default function AssetDetail() {
         onClose={() => setUploadOpen(false)}
         onSuccess={load}
       />
+
+      {/* 单独给这个版本换缩略图：不动文件，也不影响版本号与下载数 */}
+      <Modal
+        title={`上传缩略图 · v${thumbTarget?.version ?? ''}`}
+        open={!!thumbTarget}
+        onOk={uploadThumbnail}
+        onCancel={() => {
+          setThumbTarget(null)
+          setThumbFile([])
+        }}
+        confirmLoading={thumbSubmitting}
+        okText="上传"
+        cancelText="取消"
+        okButtonProps={{ disabled: thumbFile.length === 0 }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            {thumbTarget?.thumbnail_url
+              ? '这个版本已经有缩略图，上传新的会替换掉它。'
+              : '这个版本还没有缩略图。'}
+          </Typography.Text>
+          <Upload
+            beforeUpload={() => false}
+            maxCount={1}
+            listType="picture"
+            accept="image/*"
+            fileList={thumbFile}
+            onChange={({ fileList }) => setThumbFile(fileList)}
+          >
+            <Button icon={<UploadOutlined />}>选择图片</Button>
+          </Upload>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            只换这一版左侧显示的小图，文件、版本号和下载次数都不变。
+          </Typography.Text>
+        </Space>
+      </Modal>
 
       {/* 换源：只换文件，版本号与下载数不变 */}
       <Modal
