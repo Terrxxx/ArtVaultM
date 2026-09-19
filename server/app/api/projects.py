@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Project, ProjectMember, User
+from ..models import AuditLog, Project, ProjectMember, User
 from ..schemas import ProjectCreate, ProjectUpdate
-from ..serializers import project_to_dict
-from ..services import badges, clock, stats
+from ..serializers import project_to_dict, user_brief
+from ..services import audit, badges, clock, stats
 from ..services.asset_types import seed_default_categories
+from ..services.permissions import can_edit_project
 from ..services.slug import slugify
 from .deps import (
     ensure_project_access,
@@ -57,6 +58,7 @@ def create_project(
     seed_default_categories(db, project.id)
 
     new_badges = badges.sync(db, user.id)
+    audit.record(db, project.id, user, audit.PROJECT_CREATE, "创建项目")
 
     db.commit()
     db.refresh(project)
@@ -108,13 +110,16 @@ def get_project_by_slug(
     if project is None:
         raise HTTPException(status_code=404, detail="项目不存在")
     ensure_project_access(db, project.id, user)
-    return project_to_dict(
+    data = project_to_dict(
         project,
         include_categories=True,
         include_members=True,
         include_folders=True,
         viewer=user,
     )
+    # 占用量只在单个项目里算（项目列表逐个项目聚合会变成 N+1）
+    data["storage_bytes"] = stats.project_storage_bytes(db, project.id)
+    return data
 
 
 @router.get("/projects/plaza")
@@ -189,13 +194,61 @@ def get_project(
     user: User = Depends(get_current_user),
 ):
     project = ensure_project_access(db, project_id, user)
-    return project_to_dict(
+    data = project_to_dict(
         project,
         include_categories=True,
         include_members=True,
         include_folders=True,
         viewer=user,
     )
+    data["storage_bytes"] = stats.project_storage_bytes(db, project.id)
+    return data
+
+
+@router.get("/projects/{project_id}/logs")
+def project_logs(
+    project_id: int,
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """项目操作日志：只有项目所有者与高级管理员能看。"""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    if not can_edit_project(project, user):
+        raise HTTPException(status_code=403, detail="只有项目所有者或高级管理员可以查看操作日志")
+
+    page = max(1, min(limit, 200))
+    query = db.query(AuditLog).filter(AuditLog.project_id == project_id)
+    total = query.count()
+    rows = (
+        query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .offset(max(0, offset))
+        .limit(page)
+        .all()
+    )
+    # 用户名/头像一次查好，别逐条查
+    author_ids = {r.user_id for r in rows}
+    authors = (
+        {u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()}
+        if author_ids
+        else {}
+    )
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": r.id,
+                "action": r.action,
+                "detail": r.detail,
+                "created_at": clock.fmt_dt(r.created_at),
+                "user": user_brief(authors.get(r.user_id)),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.patch("/projects/{project_id}")
@@ -206,6 +259,7 @@ def update_project(
     user: User = Depends(get_current_user),
 ):
     project = ensure_project_editor(db, project_id, user)
+    old_name, old_archived = project.name, project.is_archived
 
     for field in ("name", "description", "github_repo_url", "visibility"):
         value = getattr(payload, field)
@@ -216,6 +270,18 @@ def update_project(
         project.is_archived = payload.is_archived
 
     # slug 不随改名变化，避免已分享的链接失效
+    changed = []
+    if project.name != old_name:
+        changed.append(f"改名为「{project.name}」")
+    if bool(project.is_archived) != bool(old_archived):
+        changed.append("归档" if project.is_archived else "取消归档")
+    audit.record(
+        db,
+        project_id,
+        user,
+        audit.PROJECT_UPDATE,
+        "更新项目" + ("：" + "、".join(changed) if changed else ""),
+    )
     db.commit()
     db.refresh(project)
     return project_to_dict(
@@ -235,5 +301,7 @@ def delete_project(
 ):
     project = ensure_project_editor(db, project_id, user)
     db.delete(project)
+    # 项目没了，这条日志留着（project_id 不是外键，不会跟着级联删除）
+    audit.record(db, project_id, user, audit.PROJECT_DELETE, "删除项目")
     db.commit()
     return {"ok": True}

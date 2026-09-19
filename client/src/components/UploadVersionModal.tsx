@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Form, Input, Modal, Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
+import { warnDuplicates } from '../duplicates'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
 
@@ -24,8 +25,9 @@ export default function UploadVersionModal({ open, assetId, onClose, onSuccess }
 
     setSubmitting(true)
     try {
-      await api.uploadVersion(assetId, fd)
+      const res = await api.uploadVersion(assetId, fd)
       message.success('新版本上传成功')
+      warnDuplicates(res.duplicates || [])
       form.resetFields()
       onSuccess()
       onClose()

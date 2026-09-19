@@ -8,6 +8,7 @@ from ..models import Asset, AssetVersion, Category, Folder, Project, User
 from ..schemas import AssetMoveRequest
 from ..serializers import asset_to_dict, user_brief
 from ..services import badges, chunked_upload, clock, notify, storage, storage_config, trash
+from ..services import audit, duplicates as duplicates_svc
 from ..services.permissions import can_delete_asset, can_manage_trash, can_move_asset
 from .deps import ensure_project_access, get_current_user
 
@@ -39,12 +40,29 @@ def take_staged(file: Optional[UploadFile], upload_id: Optional[str], user: User
     return storage.stage_upload(file)
 
 
+def _file_used_elsewhere(db: Session, asset: Asset, file_path: Optional[str]) -> bool:
+    """这份文件还被别的资产的版本用着吗？
+
+    哈希去重会让不同资产共用同一个文件（file_path 指向同一份），
+    所以删资产时不能无脑删实体文件，否则会把别人还在用的那份删掉。
+    """
+    if not file_path:
+        return False
+    return (
+        db.query(AssetVersion.id)
+        .join(Asset, Asset.id == AssetVersion.asset_id)
+        .filter(AssetVersion.file_path == file_path, Asset.id != asset.id)
+        .first()
+        is not None
+    )
+
+
 def purge_asset(db: Session, asset: Asset, cos: Optional[dict]) -> None:
     """删除资产本体：各版本缩略图与 COS 实体文件。由调用方负责 commit。"""
     for v in asset.versions:
         storage.delete_file(v.thumbnail, v.thumbnail_storage or "local", cos)
         storage.delete_file(v.thumb_small, v.thumb_small_storage or "local", cos)
-        if v.storage == "cos":
+        if v.storage == "cos" and not _file_used_elsewhere(db, asset, v.file_path):
             storage.delete_file(v.file_path, "cos", cos)
     storage.delete_asset_dir(asset.project_id, asset.id)
 
@@ -209,6 +227,9 @@ def create_asset(
         )
         deduped = False
 
+    # 库里还有没有同一份文件？有就提示一下（去重复用的那一版也算，它就是要提示的那份）
+    duplicate_hits = duplicates_svc.find_duplicates(db, user, staged["file_hash"])
+
     raw_thumb, thumb_name = storage.read_upload(thumbnail)
     try:
         storage.ensure_image_size(raw_thumb)
@@ -265,11 +286,13 @@ def create_asset(
     )
 
     new_badges = badges.sync(db, user.id)
+    audit.record(db, project_id, user, audit.ASSET_CREATE, f"新增资产「{name}」")
 
     db.commit()
     db.refresh(asset)
     data = asset_to_dict(asset, include_versions=True, viewer=user)
     data["deduped"] = deduped
+    data["duplicates"] = duplicate_hits
     data["new_badges"] = new_badges
     return data
 
@@ -339,6 +362,7 @@ def update_asset(
 
     # 描述 / 标签 / 封面都能推进成就，给编辑者记一次
     new_badges = badges.sync(db, user.id)
+    audit.record(db, asset.project_id, user, audit.ASSET_UPDATE, f"编辑资产「{asset.name}」")
 
     db.commit()
     db.refresh(asset)
@@ -375,6 +399,8 @@ def move_asset(
     else:
         # 0 表示移到项目根目录
         asset.folder_id = None
+    folder_label = folder.name if payload.folder_id else "项目根目录"
+    audit.record(db, asset.project_id, user, audit.ASSET_MOVE, f"移动资产「{asset.name}」到「{folder_label}」")
     db.commit()
     db.refresh(asset)
     return asset_to_dict(asset, viewer=user)
@@ -397,6 +423,7 @@ def delete_asset(
 
     # 进回收站：文件留着，满 TRASH_TTL_DAYS 天才会被彻底删除
     trash.soft_delete(asset)
+    audit.record(db, asset.project_id, user, audit.ASSET_DELETE, f"删除资产「{asset.name}」")
     db.commit()
     return {"ok": True, "trashed": True}
 
@@ -464,6 +491,7 @@ def restore_asset(
     if not can_manage_trash(asset, user):
         raise HTTPException(status_code=403, detail="没有权限恢复该资产")
     trash.restore(db, asset)
+    audit.record(db, asset.project_id, user, audit.ASSET_RESTORE, f"恢复资产「{asset.name}」")
     db.commit()
     return {"ok": True, "folder_id": asset.folder_id}
 
@@ -481,5 +509,6 @@ def purge_trashed_asset(
     if not can_manage_trash(asset, user):
         raise HTTPException(status_code=403, detail="没有权限彻底删除该资产")
     purge_asset(db, asset, storage_config.cos_params(db))
+    audit.record(db, asset.project_id, user, audit.ASSET_PURGE, f"彻底删除资产「{asset.name}」")
     db.commit()
     return {"ok": True}

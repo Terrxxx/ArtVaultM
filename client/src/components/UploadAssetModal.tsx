@@ -3,8 +3,9 @@ import { Button, Form, Input, Modal, Select, Space, Tag, Typography, Upload, mes
 import type { UploadFile } from 'antd'
 import { DeleteOutlined, InboxOutlined } from '@ant-design/icons'
 import { api } from '../api'
+import { warnDuplicates } from '../duplicates'
 import { clearUploadSession, needsChunkedUpload, uploadFileInChunks } from '../uploader'
-import type { Category } from '../types'
+import type { Category, DuplicateHit } from '../types'
 
 const normFile = (e: any) => (Array.isArray(e) ? e : e?.fileList)
 
@@ -104,6 +105,8 @@ export default function UploadAssetModal({
     setSubmitting(true)
     const next = rows.map((r) => ({ ...r }))
     let doneCount = 0
+    // 本次上传命中的「库里已有相同文件」，攒起来最后合并提示
+    const dupHits: DuplicateHit[] = []
 
     for (let i = 0; i < next.length; i++) {
       if (next[i].status === 'done') {
@@ -137,7 +140,8 @@ export default function UploadAssetModal({
         } else {
           fd.append('file', next[i].file)
         }
-        await api.createAsset(fd)
+        const created = await api.createAsset(fd)
+        dupHits.push(...(created.duplicates || []))
         clearUploadSession(next[i].file)
         next[i] = { ...next[i], status: 'done', progress: undefined }
         doneCount += 1
@@ -153,6 +157,7 @@ export default function UploadAssetModal({
 
     setSubmitting(false)
     onSuccess()
+    warnDuplicates(dupHits)
 
     if (doneCount === next.length) {
       message.success(next.length === 1 ? '上传成功' : `已上传 ${doneCount} 个资产`)

@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models import Category, User
 from ..schemas import CategoryCreate, CategoryUpdate
 from ..serializers import categories_in_display_order, category_to_dict
+from ..services import audit
 from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
@@ -36,6 +37,7 @@ def create_category(
         is_system=False,
     )
     db.add(category)
+    audit.record(db, project_id, user, audit.CATEGORY_CREATE, f"新建资产类型「{payload.name}」")
     db.commit()
     db.refresh(category)
     return category_to_dict(category)
@@ -52,10 +54,19 @@ def update_category(
     if category is None:
         raise HTTPException(status_code=404, detail="分类不存在")
     ensure_project_editor(db, category.project_id, user)
+    old_name = category.name
     if payload.name is not None:
         category.name = payload.name
     if payload.sort_order is not None:
         category.sort_order = payload.sort_order
+    audit.record(
+        db,
+        category.project_id,
+        user,
+        audit.CATEGORY_UPDATE,
+        f"更新资产类型「{old_name}」"
+        + (f"（改名为「{category.name}」）" if category.name != old_name else ""),
+    )
     db.commit()
     db.refresh(category)
     return category_to_dict(category)
@@ -74,5 +85,8 @@ def delete_category(
     if category.assets:
         raise HTTPException(status_code=400, detail="该分类下仍有资产，无法删除")
     db.delete(category)
+    audit.record(
+        db, category.project_id, user, audit.CATEGORY_DELETE, f"删除资产类型「{category.name}」"
+    )
     db.commit()
     return {"ok": True}

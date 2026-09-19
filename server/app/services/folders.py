@@ -34,3 +34,25 @@ def subtree_counts(folder: Folder) -> tuple:
         assets += _alive(node)
         stack.extend(node.children)
     return assets, folders
+
+
+def subtree_sizes(folder: Folder) -> tuple:
+    """返回 (大小, 占用空间)，都覆盖整棵子树；回收站里的资产不算。
+
+    - 大小：子树里所有版本的文件大小之和（同一份文件被两个版本共用就算两次）
+    - 占用空间：按 file_path 去重后的实际占用（哈希去重、回滚复用只算一份）
+
+    缩略图/封面不计（库里没存它们的大小），所以数字比磁盘实际占用略小。
+    """
+    total = 0
+    files = set()
+    for node in collect_subtree(folder):
+        for asset in node.assets:
+            if asset.deleted_at is not None:
+                continue
+            for version in asset.versions:
+                size = version.file_size or 0
+                total += size
+                if version.file_path:
+                    files.add((version.file_path, size))
+    return total, sum(size for _, size in files)

@@ -88,6 +88,22 @@ def heat_scores(db: Session, project_ids: List[int]) -> dict:
     return scores
 
 
+def project_storage_bytes(db: Session, project_id: int) -> int:
+    """项目占用的字节数（只算原文件）。
+
+    按 (file_path, file_size) 去重——哈希去重和回滚会让多个版本共用同一份文件，
+    直接 SUM 会把同一份文件重复计算。回收站里的资产不计，与页面上的「N 个资产」口径一致。
+    """
+    files = (
+        db.query(AssetVersion.file_path, AssetVersion.file_size)
+        .join(Asset, AssetVersion.asset_id == Asset.id)
+        .filter(Asset.project_id == project_id, Asset.deleted_at.is_(None))
+        .distinct()
+        .subquery()
+    )
+    return int(db.query(func.coalesce(func.sum(files.c.file_size), 0)).scalar() or 0)
+
+
 def parse_date(value: Optional[str]) -> Optional[date]:
     """把 YYYY-MM-DD 解析成 date；非法或为空返回 None。"""
     if not value:

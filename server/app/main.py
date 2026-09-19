@@ -17,6 +17,7 @@ from .api import (
     downloads,
     folders,
     likes,
+    media,
     members,
     notifications,
     projects,
@@ -66,6 +67,10 @@ WANTED_COLUMNS = {
     },
     "comments": {
         "version_id": "INTEGER REFERENCES asset_versions(id)",
+    },
+    "folders": {
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
     },
 }
 
@@ -260,9 +265,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 静态文件：缩略图/预览图，路径形如 /uploads/thumbnails/xxx.png
-os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+# 静态文件：只放缩略图与头像（/uploads/thumbnails/xxx.png、/uploads/avatars/xxx.gif）。
+# 不能把整个 upload_dir 挂出去——里面还有 projects/<项目>/assets/... 的资产原文件和
+# 分片上传的临时块，那些必须走带令牌的接口，不能匿名可取。
+for sub in ("avatars", "thumbnails"):
+    os.makedirs(os.path.join(settings.upload_dir, sub), exist_ok=True)
+    app.mount(f"/uploads/{sub}", StaticFiles(directory=os.path.join(settings.upload_dir, sub)), name=f"uploads-{sub}")
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
@@ -277,6 +285,7 @@ app.include_router(downloads.router, prefix="/api", tags=["downloads"])
 app.include_router(versions.router, prefix="/api", tags=["versions"])
 app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(likes.router, prefix="/api", tags=["likes"])
+app.include_router(media.router, prefix="/api", tags=["media"])
 app.include_router(subscriptions.router, prefix="/api", tags=["subscriptions"])
 app.include_router(notifications.router, prefix="/api", tags=["notifications"])
 

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Project, ProjectMember, User
 from ..serializers import member_to_dict, project_to_dict
-from ..services import badges, notify
+from ..services import audit, badges, notify
 from .deps import ensure_project_access, ensure_project_editor, get_current_user
 
 router = APIRouter()
@@ -74,6 +74,13 @@ def invite_member(
         project_id=project_id,
         content=f"邀请你加入项目「{project.name}」，等待你确认",
     )
+    audit.record(
+        db,
+        project_id,
+        user,
+        audit.MEMBER_INVITE,
+        f"邀请 {target.nickname or target.username} 加入项目",
+    )
     db.commit()
     db.refresh(member)
     return member_to_dict(member)
@@ -91,6 +98,13 @@ def remove_member(
     if member is None or member.project_id != project_id:
         raise HTTPException(status_code=404, detail="成员不存在")
     db.delete(member)
+    audit.record(
+        db,
+        project_id,
+        user,
+        audit.MEMBER_REMOVE,
+        f"移除成员 {member.user.nickname or member.user.username}",
+    )
     db.commit()
     return {"ok": True}
 
@@ -165,6 +179,7 @@ def accept_invitation(
         )
         # 「人多势众」这类成就算在项目所有者头上
         badges.sync(db, project.owner_id)
+        audit.record(db, project.id, user, audit.MEMBER_ACCEPT, "接受邀请，加入项目")
 
     db.commit()
     return {"ok": True, "project_id": member.project_id}
@@ -180,5 +195,6 @@ def decline_invitation(
     if member is None or member.user_id != user.id:
         raise HTTPException(status_code=404, detail="邀请不存在")
     db.delete(member)
+    audit.record(db, member.project_id, user, audit.MEMBER_DECLINE, "拒绝加入项目的邀请")
     db.commit()
     return {"ok": True}

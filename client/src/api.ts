@@ -14,6 +14,7 @@ import type {
   LeaderboardResponse,
   Notification,
   Project,
+  ProjectLogResponse,
   ProjectMember,
   StorageConfig,
   TrashItem,
@@ -117,6 +118,13 @@ export const api = {
     client.post(`/projects/${projectId}/members`, { user_id: userId }).then((r) => r.data),
   removeMember: (projectId: number, memberId: number) =>
     client.delete(`/projects/${projectId}/members/${memberId}`).then((r) => r.data),
+
+  // ---------- 项目操作日志 ----------
+  /** 只有项目所有者与高级管理员能看 */
+  listProjectLogs: (projectId: number, offset = 0, limit = 50) =>
+    client
+      .get<ProjectLogResponse>(`/projects/${projectId}/logs`, { params: { offset, limit } })
+      .then((r) => r.data),
 
   // ---------- 收到的邀请 ----------
   listInvitations: () => client.get<Invitation[]>('/invitations').then((r) => r.data),

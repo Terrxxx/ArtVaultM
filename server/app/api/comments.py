@@ -85,6 +85,10 @@ def add_comment(
         parent = db.get(Comment, payload.parent_id)
         if parent is None or parent.asset_id != asset_id:
             raise HTTPException(status_code=400, detail="回复的评论不存在")
+        # 只支持两层：回复一条「回复」的话，前端按「主评论 + 它的回复」渲染，
+        # 这类评论会变成存进库里却看不见，所以直接拦掉
+        if parent.parent_id is not None:
+            raise HTTPException(status_code=400, detail="只能回复主评论")
 
     comment = Comment(
         asset_id=asset_id,

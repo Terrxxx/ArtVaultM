@@ -5,7 +5,7 @@ from ..database import get_db
 from ..models import Folder, User
 from ..schemas import FolderCreate, FolderUpdate
 from ..serializers import folder_to_dict
-from ..services import badges, trash
+from ..services import audit, badges, trash
 from ..services.folders import collect_subtree, subtree_counts
 from ..services.permissions import can_delete_folder
 from .deps import ensure_project_access, get_current_user
@@ -50,6 +50,7 @@ def create_folder(
     db.add(folder)
     # 「归类强迫症」按项目所有者统计，文件夹可能是成员建的
     new_badges = badges.sync_many(db, project.owner_id, user.id)
+    audit.record(db, project_id, user, audit.FOLDER_CREATE, f"新建文件夹「{folder.name}」")
     db.commit()
     db.refresh(folder)
     data = folder_to_dict(folder, user)
@@ -68,6 +69,8 @@ def update_folder(
     if folder is None:
         raise HTTPException(status_code=404, detail="文件夹不存在")
     ensure_project_access(db, folder.project_id, user, write=True)
+    old_name = folder.name
+    old_parent = folder.parent_id
     if payload.name is not None:
         folder.name = payload.name
     if payload.sort_order is not None:
@@ -88,6 +91,20 @@ def update_folder(
                     raise HTTPException(status_code=400, detail="不能把文件夹移动到其子文件夹内")
                 cur = cur.parent
             folder.parent_id = payload.parent_id
+    # 日志里写清楚改的是名字还是位置（位置要写清移到哪）
+    changed = []
+    if folder.name != old_name:
+        changed.append(f"改名为「{folder.name}」")
+    if folder.parent_id != old_parent:
+        target = db.get(Folder, folder.parent_id) if folder.parent_id else None
+        changed.append(f"移到「{target.name if target else '项目根目录'}」")
+    audit.record(
+        db,
+        folder.project_id,
+        user,
+        audit.FOLDER_UPDATE,
+        f"更新文件夹「{old_name}」" + ("：" + "、".join(changed) if changed else ""),
+    )
     db.commit()
     db.refresh(folder)
     return folder_to_dict(folder, user)
@@ -120,5 +137,9 @@ def delete_folder(
     for node in reversed(subtree):
         db.delete(node)
 
+    audit.record(
+        db, folder.project_id, user, audit.FOLDER_DELETE,
+        f"删除文件夹「{folder.name}」（里面的资产一并进回收站）",
+    )
     db.commit()
     return {"ok": True}

@@ -2,7 +2,7 @@ from typing import Optional
 
 from .models import Asset, AssetVersion, Category, Folder, Project, ProjectMember, User
 from .services import clock, storage
-from .services.folders import subtree_counts
+from .services.folders import subtree_counts, subtree_sizes
 from .services.permissions import (
     can_contribute,
     can_delete_asset,
@@ -144,6 +144,7 @@ def category_to_dict(c: Category) -> dict:
 
 def folder_to_dict(f: Folder, viewer: Optional[User] = None) -> dict:
     subtree_assets, subtree_folders = subtree_counts(f)
+    subtree_bytes, subtree_disk_bytes = subtree_sizes(f)
     return {
         "id": f.id,
         "project_id": f.project_id,
@@ -153,6 +154,12 @@ def folder_to_dict(f: Folder, viewer: Optional[User] = None) -> dict:
         "asset_count": sum(1 for a in f.assets if a.deleted_at is None),
         "subtree_asset_count": subtree_assets,
         "subtree_folder_count": subtree_folders,
+        # 大小＝版本文件全加；占用空间＝去重后的实际占用（共用文件只算一份）
+        "subtree_bytes": subtree_bytes,
+        "subtree_disk_bytes": subtree_disk_bytes,
+        # 建表时没有时间字段，后来的 ALTER 补的，所以老行可能为 NULL
+        "created_at": clock.fmt_dt(f.created_at),
+        "updated_at": clock.fmt_dt(f.updated_at),
         # 能力字段：成员也能整理文件夹，但子树里有资产时只有创建者/高级管理员能删
         "can_manage": can_contribute(f.project, viewer),
         "can_delete": can_delete_folder(f, viewer),

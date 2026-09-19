@@ -26,7 +26,9 @@ import {
   FolderOpenOutlined,
   FolderOutlined,
   GithubOutlined,
+  HistoryOutlined,
   HomeOutlined,
+  InfoCircleOutlined,
   MoreOutlined,
   PlusOutlined,
   DownloadOutlined,
@@ -34,14 +36,16 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, projectPath, userPath } from '../api'
+import { api, formatSize, projectPath, userPath } from '../api'
 import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '../types'
 import AssetCard from '../components/AssetCard'
+import AuditLogDrawer from '../components/AuditLogDrawer'
 import Heatmap, { RECENT } from '../components/Heatmap'
 import Leaderboard from '../components/Leaderboard'
 import TrashDrawer from '../components/TrashDrawer'
 import UploadAssetModal from '../components/UploadAssetModal'
 import ArtSpin from '../components/ArtSpin'
+import { fmtChinese } from '../timefmt'
 
 // 资产列表一页多少个；资产多时只渲染这一页，其余的按需加载
 const ASSET_PAGE = 48
@@ -103,6 +107,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   >(null)
   const [moveTo, setMoveTo] = useState<number | null>(null)
   const [moveSubmitting, setMoveSubmitting] = useState(false)
+  // 操作日志抽屉（只有所有者与高级管理员能开）
+  const [logOpen, setLogOpen] = useState(false)
+  // 文件夹属性弹窗（名称可以直接改）
+  const [attrTarget, setAttrTarget] = useState<Folder | null>(null)
+  const [attrName, setAttrName] = useState('')
+  const [attrSaving, setAttrSaving] = useState(false)
   const navigate = useNavigate()
 
   // 进/出文件夹时同步 ?folder=，这样刷新、分享、从资产页返回都能落回同一个目录
@@ -303,6 +313,35 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
 
     return options
   }, [moveTarget, folders])
+
+  // 属性弹窗里直接改名：跟菜单里的「重命名」走同一个接口
+  const saveAttrName = async () => {
+    if (!attrTarget) return
+    const name = attrName.trim()
+    if (!name || name === attrTarget.name) return
+    setAttrSaving(true)
+    try {
+      await api.updateFolder(attrTarget.id, { name })
+      message.success('已重命名')
+      setAttrTarget(null)
+      load()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '重命名失败')
+    } finally {
+      setAttrSaving(false)
+    }
+  }
+
+  // 属性弹窗里的路径：项目名 / 上层 / … / 自己
+  const folderPathOf = (f: Folder) => {
+    const parts = [f.name]
+    let cur = folders.find((x) => x.id === (f.parent_id || 0))
+    while (cur) {
+      parts.unshift(cur.name)
+      cur = folders.find((x) => x.id === (cur!.parent_id || 0))
+    }
+    return [project.name, ...parts].join(' / ')
+  }
 
   const submitMove = async () => {
     if (!moveTarget || moveTo === null) return
@@ -511,8 +550,17 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                 回收站
               </Button>
             )}
+            {canEdit && (
+              <Button size="small" icon={<HistoryOutlined />} onClick={() => setLogOpen(true)}>
+                操作日志
+              </Button>
+            )}
           </Space>
         </Space>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          占用 {formatSize(project.storage_bytes || 0)} · {project.asset_count} 个资产 ·{' '}
+          {project.member_count} 个成员
+        </Typography.Text>
         {project.description && <Typography.Text type="secondary">{project.description}</Typography.Text>}
 
         {/* 用普通 flex 而不是 Space：Space 的子项是收缩宽度，百分比宽度在里面算不出来，
@@ -671,6 +719,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                               label: '移动到…',
                             },
                             {
+                              key: 'props',
+                              icon: <InfoCircleOutlined />,
+                              label: '属性',
+                            },
+                            {
                               key: 'delete',
                               icon: <DeleteOutlined />,
                               label: canDeleteFolder(c)
@@ -693,6 +746,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
                                 from: c.parent_id || 0,
                               })
                               setMoveTo(null)
+                            } else if (key === 'props') {
+                              setAttrTarget(c)
+                              setAttrName(c.name)
                             } else if (key === 'delete') {
                               requestDeleteFolder(c)
                             }
@@ -792,6 +848,12 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         onChanged={load}
       />
 
+      <AuditLogDrawer
+        open={logOpen}
+        projectId={project.id}
+        onClose={() => setLogOpen(false)}
+      />
+
       <UploadAssetModal
         open={uploadOpen}
         projectId={project.id}
@@ -840,6 +902,65 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
           onChange={setMoveTo}
           options={moveOptions}
         />
+      </Modal>
+
+      {/* 文件夹属性：名字可以直接在这里改，其余的只读 */}
+      <Modal
+        title={`属性 · ${attrTarget?.name ?? ''}`}
+        open={!!attrTarget}
+        onCancel={() => setAttrTarget(null)}
+        footer={[
+          <Button key="close" onClick={() => setAttrTarget(null)}>
+            关闭
+          </Button>,
+          <Button
+            key="save"
+            type="primary"
+            loading={attrSaving}
+            disabled={!attrName.trim() || attrName.trim() === attrTarget?.name}
+            onClick={saveAttrName}
+          >
+            保存
+          </Button>,
+        ]}
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            gap: '10px 20px',
+            fontSize: 13,
+            alignItems: 'center',
+          }}
+        >
+          <Typography.Text type="secondary">名称</Typography.Text>
+          <Input
+            value={attrName}
+            onChange={(e) => setAttrName(e.target.value)}
+            onPressEnter={saveAttrName}
+            placeholder="文件夹名称"
+          />
+          <Typography.Text type="secondary">路径</Typography.Text>
+          <Typography.Text>{attrTarget ? folderPathOf(attrTarget) : ''}</Typography.Text>
+          <Typography.Text type="secondary">包含</Typography.Text>
+          <Typography.Text>
+            {attrTarget?.subtree_folder_count ?? 0} 个文件夹、
+            {attrTarget?.subtree_asset_count ?? 0} 个资产
+          </Typography.Text>
+          <Typography.Text type="secondary">大小</Typography.Text>
+          <Typography.Text>
+            {(attrTarget?.subtree_bytes ?? 0).toLocaleString()} 字节（
+            {formatSize(attrTarget?.subtree_bytes ?? 0)}）
+          </Typography.Text>
+          <Typography.Text type="secondary">创建时间</Typography.Text>
+          <Typography.Text>
+            {attrTarget?.created_at ? fmtChinese(attrTarget.created_at) : '未知'}
+          </Typography.Text>
+          <Typography.Text type="secondary">修改时间</Typography.Text>
+          <Typography.Text>
+            {attrTarget?.updated_at ? fmtChinese(attrTarget.updated_at) : '未知'}
+          </Typography.Text>
+        </div>
       </Modal>
 
       {/* 重命名文件夹 */}

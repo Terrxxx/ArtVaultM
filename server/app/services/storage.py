@@ -506,15 +506,14 @@ def presigned_url(
 
 
 def display_url(rel_path: Optional[str], storage: str = "local") -> Optional[str]:
-    """把存储路径转成前端可直接使用的 URL（本地走 /uploads，COS 走临时签名）。"""
+    """把存储路径转成前端可直接使用的 URL。
+
+    本地走 /uploads 静态目录；COS 发一个固定的本站地址（/api/media/cos/...），
+    真正取图时由那个接口现签一次再跳过去——签名有有效期，直接发签名链接的话
+    前端会一直用同一条，过期后就加载不出来了。
+    """
     if not rel_path:
         return None
     if storage == "cos":
-        cos = storage_config.cached_params()
-        if not cos:
-            return None
-        try:
-            return presigned_url(rel_path, cos, DISPLAY_URL_TTL)
-        except Exception:  # noqa: BLE001
-            return None
+        return f"/api/media/cos/{rel_path}"
     return f"/uploads/{rel_path}"

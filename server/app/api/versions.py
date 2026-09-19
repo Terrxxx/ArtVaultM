@@ -14,7 +14,8 @@ from ..database import get_db
 from ..models import Asset, AssetVersion, DownloadLog, User
 from ..schemas import VersionChangelogUpdate
 from ..serializers import version_to_dict
-from ..services import badges, clock, notify, storage, storage_config
+from ..services import audit, badges, clock, notify, storage, storage_config
+from ..services import duplicates as dupes
 from .assets import take_staged
 from .deps import ensure_project_access, get_current_user
 
@@ -119,6 +120,9 @@ def upload_version(
         )
         deduped = False
 
+    # 库里还有没有同一份文件？有就提示一下（去重复用的那一版也算，它就是要提示的那份）
+    duplicate_hits = dupes.find_duplicates(db, user, staged["file_hash"])
+
     # 每个版本可以有自己的一张预览缩略图
     raw_thumb, thumb_name = storage.read_upload(thumbnail)
     try:
@@ -173,11 +177,13 @@ def upload_version(
         )
 
     new_badges = badges.sync(db, user.id)
+    audit.record(db, project.id, user, audit.VERSION_UPLOAD, f"资产「{asset.name}」上传 v{next_version}")
 
     db.commit()
     db.refresh(version)
     data = version_to_dict(version)
     data["deduped"] = deduped
+    data["duplicates"] = duplicate_hits
     data["new_badges"] = new_badges
     return data
 
@@ -401,6 +407,11 @@ def replace_version_source(
     version.thumb_small = small["path"]
     version.thumb_small_storage = small["storage"]
 
+    audit.record(
+        db, asset.project_id, user, audit.VERSION_REPLACE,
+        f"替换资产「{asset.name}」v{version.version} 的源文件",
+    )
+
     db.commit()
     db.refresh(version)
     return version_to_dict(version)
@@ -433,10 +444,19 @@ def set_version_thumbnail(
     if not saved["path"]:
         raise HTTPException(status_code=400, detail="缩略图保存失败")
 
-    # 旧的删掉，避免在磁盘/COS 上堆积
-    storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
+    # 旧的删掉，避免在磁盘/COS 上堆积；但资产封面可能正引用着这一张，那就不能删（删了封面会裂）
+    same_as_cover = asset.cover_thumbnail == version.thumbnail and (
+        asset.cover_thumbnail_storage or "local"
+    ) == (version.thumbnail_storage or "local")
+    if version.thumbnail and not same_as_cover:
+        storage.delete_file(version.thumbnail, version.thumbnail_storage or "local", cos)
     version.thumbnail = saved["path"]
     version.thumbnail_storage = saved["storage"]
+
+    audit.record(
+        db, asset.project_id, user, audit.VERSION_THUMBNAIL,
+        f"更新资产「{asset.name}」v{version.version} 的缩略图",
+    )
 
     db.commit()
     db.refresh(version)
@@ -500,6 +520,10 @@ def rollback_version(
         )
 
     new_badges = badges.sync(db, user.id)
+    audit.record(
+        db, project.id, user, audit.VERSION_ROLLBACK,
+        f"资产「{asset.name}」回滚到 v{src.version}（新版本 v{next_version}）",
+    )
 
     db.commit()
     db.refresh(version)
@@ -522,6 +546,10 @@ def update_version_changelog(
     ensure_project_access(db, version.asset.project_id, user, write=True)
 
     version.changelog = payload.changelog
+    audit.record(
+        db, version.asset.project_id, user, audit.VERSION_CHANGELOG,
+        f"修改资产「{version.asset.name}」v{version.version} 的说明",
+    )
     db.commit()
     db.refresh(version)
     return version_to_dict(version)
@@ -542,6 +570,10 @@ def delete_version(
         raise HTTPException(status_code=400, detail="不能删除最新版本，请先上传新版本")
 
     _delete_version_files(db, version, storage_config.cos_params(db))
+    audit.record(
+        db, version.asset.project_id, user, audit.VERSION_DELETE,
+        f"删除资产「{version.asset.name}」v{version.version}",
+    )
 
     db.delete(version)
     db.commit()

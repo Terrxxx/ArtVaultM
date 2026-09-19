@@ -111,6 +111,9 @@ class Folder(Base):
     parent_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
     name = Column(String, nullable=False)
     sort_order = Column(Integer, default=0)
+    # 建表时没有时间字段，用 WANTED_COLUMNS 的 ALTER 补上；补之前的老行是 NULL
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     project = relationship("Project", back_populates="folders")
     parent = relationship("Folder", remote_side=[id], back_populates="children")
@@ -281,6 +284,27 @@ class UserBadge(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     badge_key = Column(String, nullable=False)
     unlocked_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """项目内的操作日志（谁在什么时候改了什么）。
+
+    只记改动型操作（增删改资产/版本/文件夹、移动重命名、成员与权限、项目改名）。
+
+    project_id / user_id 故意**不设外键**：项目被删时这条日志要留着（设了外键+级联就一起没了），
+    用户本来是软删除，也不需要约束。
+    """
+
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    # 机器可读的动作（asset.delete / version.upload …），便于以后按类型筛
+    action = Column(String, nullable=False)
+    # 给人看的整句，例如「删除资产『英雄模型』」
+    detail = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class StorageConfig(Base):

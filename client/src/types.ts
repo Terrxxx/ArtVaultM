@@ -33,6 +33,8 @@ export interface Version {
   download_count: number
   uploader?: UserBrief | null
   created_at?: string
+  /** 上传响应里带的：库里已有相同文件的提示 */
+  duplicates?: DuplicateHit[]
 }
 
 /** 资产类型：项目内平铺的一份声明，与资产放在哪个文件夹无关 */
@@ -58,6 +60,14 @@ export interface Folder {
   subtree_asset_count: number
   /** 子孙文件夹总数，不含自己 */
   subtree_folder_count: number
+  /** 子树里所有版本文件大小之和（共用文件按版本各算一次） */
+  subtree_bytes: number
+  /** 子树去重后的实际占用（共用文件只算一份） */
+  subtree_disk_bytes: number
+  /** 建文件夹的时间；老数据为 null（时间字段是后加的） */
+  created_at?: string | null
+  /** 最后一次改名/移动的时间；老数据为 null */
+  updated_at?: string | null
   /* ----- 以下能力字段由后端算好，前端只读 ----- */
   /** 能整理（新建子文件夹/重命名/移动）：项目成员即可 */
   can_manage: boolean
@@ -98,6 +108,8 @@ export interface Asset {
   can_delete: boolean
   /** 能拖到别的文件夹 */
   can_move: boolean
+  /** 上传响应里带的：库里已有相同文件的提示 */
+  duplicates?: DuplicateHit[]
 }
 
 export interface ProjectMember {
@@ -135,6 +147,33 @@ export interface Project {
   can_edit: boolean
   /** 能上传资产、整理文件夹、改资产 */
   can_contribute: boolean
+  /** 项目占用的字节数（只算原文件、不含回收站）；只有单个项目接口返回 */
+  storage_bytes?: number
+}
+
+/** 上传时命中的「库里已有一份完全相同的文件」 */
+export interface DuplicateHit {
+  project_id: number
+  project_name: string
+  asset_id: number
+  asset_name: string
+  version: number
+}
+
+/** 项目操作日志的一条 */
+export interface ProjectLogItem {
+  id: number
+  /** 机器可读的动作，如 asset.delete */
+  action: string
+  /** 给人看的整句 */
+  detail: string
+  created_at?: string
+  user?: UserBrief | null
+}
+
+export interface ProjectLogResponse {
+  total: number
+  items: ProjectLogItem[]
 }
 
 export interface Invitation {

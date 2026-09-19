@@ -28,6 +28,14 @@ export function fmtDay(v?: string | null): string {
   return d ? d.toLocaleDateString() : (v ?? '')
 }
 
+/** 2026年7月20日，4:13:53（中式写法，小时不补零；属性弹窗用） */
+export function fmtChinese(v?: string | null): string {
+  const d = parse(v)
+  if (!d) return v ?? ''
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日，` +
+    `${d.getHours()}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 /** 9月16日 18:33 */
 export function fmtShort(v?: string | null): string {
   const d = parse(v)
