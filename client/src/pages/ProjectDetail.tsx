@@ -37,7 +37,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, formatSize, projectPath, userPath } from '../api'
-import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project } from '../types'
+import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project, UserBrief } from '../types'
 import AssetCard from '../components/AssetCard'
 import AuditLogDrawer from '../components/AuditLogDrawer'
 import Heatmap, { RECENT } from '../components/Heatmap'
@@ -173,7 +173,7 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
     let alive = true
     setRankLoading(true)
     api
-      .getProjectLeaderboard(project.id, rankDays)
+      .getProjectLeaderboard(project.id, rankDays, 5)
       .then((r) => alive && setRankItems(r.items))
       .catch(() => alive && setRankItems([]))
       .finally(() => alive && setRankLoading(false))
@@ -196,6 +196,11 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const isMember = project.can_contribute
   const canManageFolder = project.can_contribute
   const canMoveAsset = (a: Asset) => a.can_move
+  // 左栏成员头像：所有者排最前（成员列表里不含所有者），点开进各自主页
+  const memberFaces: UserBrief[] = [
+    ...(project.owner ? [project.owner] : []),
+    ...(project.members || []).map((m) => m.user),
+  ].filter(Boolean) as UserBrief[]
   const canDeleteFolder = (c: Folder) => c.can_delete
   // 删除时需要输入名称二次确认：整个子树里有资产或有子文件夹
   const needsConfirm = (c: Folder) => c.subtree_asset_count > 0 || c.subtree_folder_count > 0
@@ -496,8 +501,21 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             days={rankDays}
             onDaysChange={setRankDays}
             loading={rankLoading}
+            limit={5}
             emptyText="这段时间还没有贡献，第一个上？"
           />
+
+          {/* 项目成员：只列头像，点开进个人主页 */}
+          <Typography.Title level={5} style={{ marginTop: 20, marginBottom: 12 }}>
+            项目成员（{memberFaces.length}）
+          </Typography.Title>
+          <Space size={8} wrap>
+            {memberFaces.map((u) => (
+              <Link key={u.username} to={userPath(u)} title={u.nickname || u.username}>
+                <Avatar size={32} icon={<UserOutlined />} src={u.avatar_url || undefined} />
+              </Link>
+            ))}
+          </Space>
         </div>
 
         {/* 中间：原来的项目内容 */}

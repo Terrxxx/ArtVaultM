@@ -133,15 +133,22 @@ export default function ProjectList() {
               </Space>
             </Link>
           )}
-          <Space size={8} wrap>
+          {/* 格子挨紧一点（跟版本行同样的处理：Space 间距 + 去掉 Tag 自带的右外边距） */}
+          <Space size={4} wrap className="av-tag-tight">
             {typeof p.heat === 'number' && <Tag color="volcano">热度 {p.heat}</Tag>}
             <Tag>{p.asset_count} 个资产</Tag>
             <Tag>{p.category_count} 个分类</Tag>
-            {p.member_count > 0 && <Tag color="blue">{p.member_count} 位成员</Tag>}
             {p.github_repo_url && (
-              <Tag icon={<GithubOutlined />}>
-                <a href={p.github_repo_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                  GitHub
+              // 只留图标；链接包在图标上，不然去掉文字后就没地方可点了
+              <Tag>
+                <a
+                  href={p.github_repo_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title="GitHub 仓库"
+                >
+                  <GithubOutlined />
                 </a>
               </Tag>
             )}
@@ -226,7 +233,7 @@ export default function ProjectList() {
           initialValues={{ visibility: 'public' }}
         >
           <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
-            <Input placeholder="如：暗黑之魂" />
+            <Input placeholder="" />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="项目简介" />
@@ -237,8 +244,8 @@ export default function ProjectList() {
           <Form.Item name="visibility" label="可见性">
             <Select
               options={[
-                { value: 'public', label: '公开（所有登录用户可见）' },
-                { value: 'private', label: '私有（仅自己与项目成员可见）' },
+                { value: 'public', label: '公开（所有用户可见）' },
+                { value: 'private', label: '私有（仅项目成员可见）' },
               ]}
             />
           </Form.Item>

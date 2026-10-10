@@ -24,9 +24,9 @@ THUMB_MAX_EDGE = 512
 THUMB_TARGET_BYTES = 10 * 1024
 THUMB_QUALITIES = (82, 74, 66, 58, 50, 42, 34, 26, 20)
 
-# 版本列表等紧凑场景用的小图
-SMALL_THUMB_EDGE = 42
-SMALL_THUMB_TARGET_BYTES = 3 * 1024
+# 版本列表等紧凑场景用的小图（按显示尺寸的 2 倍给，高清屏也不糊）
+SMALL_THUMB_EDGE = 144
+SMALL_THUMB_TARGET_BYTES = 32 * 1024
 SMALL_QUALITIES = (70, 60, 50, 40, 30)
 
 # 图片展示链接的有效期（头像/缩略图会随页面一起加载）
@@ -157,7 +157,7 @@ def read_upload(file: Optional[UploadFile]) -> tuple:
 
 
 def prepare_thumbnails(raw: bytes) -> dict:
-    """产出主图与 42×42 小图。
+    """产出主图与 144×144 小图。
 
     返回 {"main": bytes|None, "small": bytes|None, "raw": bool}
     raw=True 表示不是可解码的图片，main 里是原始字节、small 为 None。
@@ -230,7 +230,7 @@ def derive_cover_from_file(
 
 
 def prepare_cover(raw: bytes) -> dict:
-    """封面：保持原始尺寸转成 WebP（不做压缩），另派生 42×42 小图。"""
+    """封面：保持原始尺寸转成 WebP（不做压缩），另派生 144×144 小图。"""
     if not raw:
         return {"main": None, "small": None, "raw": False}
 
@@ -251,7 +251,7 @@ def prepare_cover(raw: bytes) -> dict:
 
 
 def derive_small(raw: Optional[bytes]) -> Optional[bytes]:
-    """从图片派生出 42×42 小图；不是可解码的图片就返回 None。"""
+    """从图片派生出 144×144 小图；不是可解码的图片就返回 None。"""
     if not raw:
         return None
     img = _load_image(raw)
@@ -268,10 +268,10 @@ def derive_small(raw: Optional[bytes]) -> Optional[bytes]:
 def store_version_small(
     asset_id: int, version: int, data: Optional[bytes], cos: Optional[dict] = None
 ) -> dict:
-    """保存某个版本的 42×42 小图（由该版本的文件派生），返回 {path, storage}。"""
+    """保存某个版本的 144×144 小图（由该版本的文件派生），返回 {path, storage}。"""
     if not data:
         return _empty_slot()
-    key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}_s42"
+    key = f"thumbnails/{asset_id}_v{version}_{uuid.uuid4().hex[:8]}_s144"
     return _store_image(data, key, cos)
 
 
@@ -287,7 +287,7 @@ def save_asset_cover(
     filename: Optional[str],
     cos: Optional[dict] = None,
 ) -> dict:
-    """保存资产封面：主图（最长边 512、<10KB WebP）+ 42×42 小图。
+    """保存资产封面：主图（最长边 512、<10KB WebP）+ 144×144 小图。
 
     小图由封面自动派生，用户不需要额外上传。
     返回 {"main": {path, storage}, "small": {path, storage}}
@@ -311,7 +311,7 @@ def save_asset_cover(
 
     return {
         "main": _store_image(prepared["main"], stem, cos),
-        "small": _store_image(prepared["small"], f"{stem}_s42", cos),
+        "small": _store_image(prepared["small"], f"{stem}_s144", cos),
     }
 
 

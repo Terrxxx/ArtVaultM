@@ -134,8 +134,8 @@ export default function ProjectEdit() {
                   <Form.Item name="visibility" label="可见性">
                     <Select
                       options={[
-                        { value: 'public', label: '公开（所有登录用户可见）' },
-                        { value: 'private', label: '私有（仅自己与项目成员可见）' },
+                        { value: 'public', label: '公开（所有用户可见）' },
+                        { value: 'private', label: '私有（项目成员可见）' },
                       ]}
                     />
                   </Form.Item>

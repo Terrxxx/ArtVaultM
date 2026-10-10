@@ -12,6 +12,8 @@ import ArtSpin from '../components/ArtSpin'
 
 // 成就一页放几个；成就多了左栏会很长，所以做成分页
 const BADGES_PER_PAGE = 8
+// 每个项目的资产一页放几个（接口按时间倒序给，第一页即最新 8 个）
+const ASSETS_PER_PAGE = 8
 
 export default function UserProfilePage() {
   // 路由为 /{用户名}
@@ -28,6 +30,8 @@ export default function UserProfilePage() {
   const [error, setError] = useState<string | null>(null)
   // 成就栏一页 8 个，从第一页开始
   const [badgePage, setBadgePage] = useState(1)
+  // 每个项目的资产分页：{项目 id: 第几页}
+  const [assetPages, setAssetPages] = useState<Record<number, number>>({})
 
   // 资料 + 热力图
   useEffect(() => {
@@ -201,20 +205,31 @@ export default function UserProfilePage() {
           </Card>
 
           {projects.length === 0 ? (
-            <Empty description="这里还没有资产——要么还没传，要么是私有项目你看不到" style={{ marginTop: 40 }} />
+            <Empty description="还没有资产或为私有项目" style={{ marginTop: 40 }} />
           ) : (
-            projects.map((p, idx) =>
-              p.restricted ? (
+            projects.map((p, idx) => {
+              if (p.restricted) {
                 // 私有项目且访问者无权查看：只提示，不暴露项目名与资产
-                <Card key={`restricted-${idx}`} size="small">
-                  <Space size={8}>
-                    <Tag>私有</Tag>
-                    <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
-                  </Space>
-                </Card>
-              ) : (
+                return (
+                  <Card key={`restricted-${idx}`} size="small">
+                    <Space size={8}>
+                      <Tag>私有</Tag>
+                      <Typography.Text type="secondary">该更新为私有仓库</Typography.Text>
+                    </Space>
+                  </Card>
+                )
+              }
+              // 每个项目最多显示 8 个（接口按时间倒序返回，所以第一页就是最新的 8 个）
+              const pid = p.project_id ?? idx
+              const page = assetPages[pid] ?? 1
+              const pages = Math.max(1, Math.ceil(p.assets.length / ASSETS_PER_PAGE))
+              const shown = p.assets.slice(
+                (Math.min(page, pages) - 1) * ASSETS_PER_PAGE,
+                Math.min(page, pages) * ASSETS_PER_PAGE,
+              )
+              return (
                 <Card
-                  key={p.project_id ?? idx}
+                  key={pid}
                   title={
                     <Space size={10}>
                       {/* /projects/:id 会自动重定向到规范地址 */}
@@ -229,15 +244,27 @@ export default function UserProfilePage() {
                   }
                 >
                   <Row gutter={[16, 16]}>
-                    {p.assets.map((a) => (
+                    {shown.map((a) => (
                       <Col xs={24} sm={12} lg={6} key={a.id}>
                         <AssetCard asset={a} />
                       </Col>
                     ))}
                   </Row>
+                  {pages > 1 && (
+                    <Pagination
+                      simple
+                      current={Math.min(page, pages)}
+                      pageSize={ASSETS_PER_PAGE}
+                      total={p.assets.length}
+                      onChange={(n) =>
+                        setAssetPages((prev) => ({ ...prev, [pid]: n }))
+                      }
+                      style={{ marginTop: 12, justifyContent: 'center' }}
+                    />
+                  )}
                 </Card>
-              ),
-            )
+              )
+            })
           )}
         </Space>
       </div>

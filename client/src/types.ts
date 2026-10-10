@@ -26,7 +26,7 @@ export interface Version {
   file_hash?: string | null
   thumbnail?: string | null
   thumbnail_url?: string | null
-  /** 该版本的 42×42 小图（图片版本才有，由版本文件派生） */
+  /** 该版本的 144×144 小图（图片版本才有，由版本文件派生） */
   thumb_small_url?: string | null
   changelog?: string | null
   is_latest: boolean
@@ -85,7 +85,7 @@ export interface Asset {
   tags: string[]
   cover_thumbnail?: string | null
   cover_thumbnail_url?: string | null
-  /** 资产级 42×42 小图（由封面派生，仅图片资产有），用于版本列表 */
+  /** 资产级 144×144 小图（由封面派生，仅图片资产有），用于版本列表 */
   small_thumbnail_url?: string | null
   status: string
   created_by: number

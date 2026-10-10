@@ -137,7 +137,7 @@ export default function AssetEdit() {
                   <Form.Item name="description" label="描述">
                     <Input.TextArea rows={3} />
                   </Form.Item>
-                  <Form.Item name="tags" label="标签（逗号分隔）">
+                  <Form.Item name="tags" label="标签（英文逗号分隔）">
                     <Input placeholder="角色,主角" />
                   </Form.Item>
                   <Form.Item label="封面 / 缩略图">

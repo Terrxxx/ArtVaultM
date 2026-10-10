@@ -125,6 +125,11 @@ export const api = {
     client
       .get<ProjectLogResponse>(`/projects/${projectId}/logs`, { params: { offset, limit } })
       .then((r) => r.data),
+  /** 清空操作日志（仅所有者与高级管理员） */
+  clearProjectLogs: (projectId: number) =>
+    client
+      .delete<{ ok: boolean; removed: number }>(`/projects/${projectId}/logs`)
+      .then((r) => r.data),
 
   // ---------- 收到的邀请 ----------
   listInvitations: () => client.get<Invitation[]>('/invitations').then((r) => r.data),
@@ -197,6 +202,11 @@ export const api = {
     client.post(`/assets/${assetId}/restore`).then((r) => r.data),
   purgeAsset: (assetId: number) =>
     client.delete(`/assets/${assetId}/purge`).then((r) => r.data),
+  /** 清空回收站：只删得动自己有权限的那些（removed = 实际删掉的个数） */
+  emptyTrash: (projectId: number) =>
+    client
+      .delete<{ ok: boolean; removed: number }>(`/projects/${projectId}/trash`)
+      .then((r) => r.data),
 
   // ---------- 分片上传 ----------
   /** 开一个分片上传会话（大文件用） */

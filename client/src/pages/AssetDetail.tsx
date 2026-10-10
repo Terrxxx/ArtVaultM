@@ -136,7 +136,7 @@ export default function AssetDetail() {
 
   // 版本列表的缩略图来自该版本自己的文件（只有图片版本有）
   // 版本行左边的小图：优先这个版本上传的缩略图（够大、放大不糊），
-  // 没有才退回后端从图片文件派生的 42×42 小图
+  // 没有才退回后端从图片文件派生的 144×144 小图
   const rowThumbOf = (v: Version) => v.thumbnail_url || v.thumb_small_url || null
 
   const toggleLike = async () => {
@@ -614,8 +614,8 @@ export default function AssetDetail() {
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Typography.Text type="secondary">
             {thumbTarget?.thumbnail_url
-              ? '这个版本已经有缩略图，上传新的会替换掉它。'
-              : '这个版本还没有缩略图。'}
+              ? '该版本已有缩略图，上传新的会替换。'
+              : '该版本没有缩略图。'}
           </Typography.Text>
           <Upload
             beforeUpload={() => false}
@@ -684,7 +684,7 @@ export default function AssetDetail() {
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Typography.Text type="secondary">
             会把 v{rollbackTarget?.version} 的文件复制成一个新版本（版本号照常递增），
-            v{rollbackTarget?.version} 本身仍然保留，不会丢。
+            v{rollbackTarget?.version} 本身仍保留。
           </Typography.Text>
           <Input
             value={rollbackChangelog}
@@ -708,7 +708,7 @@ export default function AssetDetail() {
           rows={3}
           value={changelogText}
           onChange={(e) => setChangelogText(e.target.value)}
-          placeholder="这一版改了什么，留空表示清空说明"
+          placeholder="说明 (留空清空说明)"
         />
       </Modal>
 

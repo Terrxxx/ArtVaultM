@@ -512,3 +512,30 @@ def purge_trashed_asset(
     audit.record(db, asset.project_id, user, audit.ASSET_PURGE, f"彻底删除资产「{asset.name}」")
     db.commit()
     return {"ok": True}
+
+
+@router.delete("/projects/{project_id}/trash")
+def empty_trash(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """清空整个回收站：逐条按 can_manage_trash 判断，删不掉的留着。"""
+    ensure_project_access(db, project_id, user)
+    rows = (
+        db.query(Asset)
+        .filter(Asset.project_id == project_id, Asset.deleted_at.isnot(None))
+        .all()
+    )
+    cos = storage_config.cos_params(db)
+    removed = 0
+    for asset in rows:
+        if not can_manage_trash(asset, user):
+            continue
+        # 先取出来：purge_asset 会把对象从会话里删掉
+        name = asset.name
+        purge_asset(db, asset, cos)
+        audit.record(db, project_id, user, audit.ASSET_PURGE, f"彻底删除资产「{name}」")
+        removed += 1
+    db.commit()
+    return {"ok": True, "removed": removed}

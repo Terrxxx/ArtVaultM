@@ -59,13 +59,47 @@ export default function TrashDrawer({ open, projectId, onClose, onChanged }: Pro
     }
   }
 
+  // 清空整个回收站：后端只会删当前用户有权限的那些，其余的留着
+  const emptyAll = async () => {
+    const before = items.length
+    try {
+      const r = await api.emptyTrash(projectId)
+      message.success(`已彻底删除 ${r.removed} 个资产`)
+      if (r.removed < before) {
+        message.warning(`剩下 ${before - r.removed} 个没有权限，需由资产创建者或项目所有者处理`)
+      }
+      load()
+      onChanged()
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || '清空失败')
+    }
+  }
+
+  const clearable = items.some((it) => it.can_manage)
+
   return (
     <Drawer
-      title={`回收站（${items.length}）`}
+      title="回收站"
       placement="right"
       width={420}
       open={open}
       onClose={onClose}
+      extra={
+        clearable && (
+          <Popconfirm
+            title="清空回收站"
+            description="里面的资产会连文件一起抹掉，不可恢复"
+            okText="清空"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={emptyAll}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />}>
+              清空回收站
+            </Button>
+          </Popconfirm>
+        )
+      }
     >
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
         删除的资产会在这里保留 30 天，到期后自动清理。恢复时会尽量放回原来的文件夹。

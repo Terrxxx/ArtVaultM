@@ -251,6 +251,29 @@ def project_logs(
     }
 
 
+@router.delete("/projects/{project_id}/logs")
+def clear_project_logs(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """清空项目操作日志：跟查看同权限，仅项目所有者与高级管理员。"""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    if not can_edit_project(project, user):
+        raise HTTPException(status_code=403, detail="只有项目所有者或高级管理员可以清除操作日志")
+
+    # 不记日志：刚清完又冒出来一条会很怪
+    removed = (
+        db.query(AuditLog)
+        .filter(AuditLog.project_id == project_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"ok": True, "removed": removed}
+
+
 @router.patch("/projects/{project_id}")
 def update_project(
     project_id: int,
