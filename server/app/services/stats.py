@@ -331,6 +331,8 @@ def update_log(
                 "created_at": _iso(v.created_at),
                 "asset_id": v.asset_id,
                 "asset_name": asset.name if asset else None,
+                # 资产类型（项目内的分类，如「角色」「场景」）
+                "category_name": asset.category.name if asset and asset.category else None,
                 "project_id": asset.project_id if asset else None,
                 "project_name": project.name if project else None,
                 "uploader": uploader,

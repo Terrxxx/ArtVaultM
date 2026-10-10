@@ -264,6 +264,8 @@ export interface UpdateItem {
   created_at?: string | null
   asset_id?: number | null
   asset_name?: string | null
+  /** 资产类型（项目内的分类名） */
+  category_name?: string | null
   project_id?: number | null
   project_name?: string | null
   uploader?: UserBrief | null
