@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { Avatar, Badge, Button, Dropdown, Grid, Layout as AntLayout, Space } from 'antd'
 import {
   BellOutlined,
-  DatabaseOutlined,
   DesktopOutlined,
   GithubOutlined,
   MoonOutlined,
@@ -89,7 +88,17 @@ export default function Layout() {
       >
         <Space size={narrow ? 14 : 28} align="center">
           <Link to="/" style={{ fontSize: 20, fontWeight: 700, color: 'var(--av-primary)' }}>
-            <DatabaseOutlined />
+            {/* 内联而不是引用 /logo.svg：外链 SVG 继承不到 color，logo 就跟不了主题色了 */}
+            <svg
+              viewBox="64 64 896 896"
+              width="1em"
+              height="1em"
+              fill="currentColor"
+              aria-hidden="true"
+              style={{ verticalAlign: '-0.125em' }}
+            >
+              <path d="M832 64H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V96c0-17.7-14.3-32-32-32zm-600 72h560v208H232V136zm560 480H232V408h560v208zm0 272H232V680h560v208zM304 240a40 40 0 1080 0 40 40 0 10-80 0zm0 272a40 40 0 1080 0 40 40 0 10-80 0zm0 272a40 40 0 1080 0 40 40 0 10-80 0z" />
+            </svg>
             {!narrow && (
               <>
                 {' '}
