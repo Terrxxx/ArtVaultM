@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -165,6 +165,26 @@ def project_activity(
         "days": stats.daily_counts(db, chosen, project_id=project_id),
         # 同个人页：热力图最后一列按服务器日期对齐
         "today": clock.today().isoformat(),
+    }
+
+
+@router.get("/projects/{project_id}/updates")
+def project_updates(
+    project_id: int,
+    date_str: Optional[str] = Query(None, alias="date"),
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """项目更新日志：给了 date 就返回当天全部更新，否则返回最近若干条。
+
+    热力图点某天就传哪天，和个人主页的同名接口走同一套 stats.update_log。
+    """
+    ensure_project_access(db, project_id, user)
+    on_date = stats.parse_date(date_str)
+    return {
+        "date": date_str if on_date else None,
+        "items": stats.update_log(db, limit=limit, on_date=on_date, project_id=project_id),
     }
 
 

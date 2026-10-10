@@ -37,12 +37,21 @@ import {
 } from '@ant-design/icons'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, formatSize, projectPath, userPath } from '../api'
-import type { ActivityResponse, Asset, Folder, LeaderboardItem, Project, UserBrief } from '../types'
+import type {
+  ActivityResponse,
+  Asset,
+  Folder,
+  LeaderboardItem,
+  Project,
+  UpdateItem,
+  UserBrief,
+} from '../types'
 import AssetCard from '../components/AssetCard'
 import AuditLogDrawer from '../components/AuditLogDrawer'
 import Heatmap, { RECENT } from '../components/Heatmap'
 import Leaderboard from '../components/Leaderboard'
 import TrashDrawer from '../components/TrashDrawer'
+import UpdateLog from '../components/UpdateLog'
 import UploadAssetModal from '../components/UploadAssetModal'
 import ArtSpin from '../components/ArtSpin'
 import { fmtChinese } from '../timefmt'
@@ -80,6 +89,10 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
   const [subscribed, setSubscribed] = useState(false)
   const [activity, setActivity] = useState<ActivityResponse | null>(null)
   const [year, setYear] = useState<string | number>(RECENT)
+  // 热力图点中的某天：非空时中栏整体让给当天的更新日志
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [updates, setUpdates] = useState<UpdateItem[]>([])
+  const [loadingUpdates, setLoadingUpdates] = useState(false)
   const [rankDays, setRankDays] = useState(30)
   const [rankItems, setRankItems] = useState<LeaderboardItem[]>([])
   const [rankLoading, setRankLoading] = useState(true)
@@ -167,6 +180,24 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
       alive = false
     }
   }, [project.id, year])
+
+  // 当天更新日志：只在点了热力图某天时才请求，退出当天视图就把数据清掉
+  useEffect(() => {
+    if (!selectedDate) {
+      setUpdates([])
+      return
+    }
+    let alive = true
+    setLoadingUpdates(true)
+    api
+      .getProjectUpdates(project.id, selectedDate, 100)
+      .then((r) => alive && setUpdates(r.items))
+      .catch(() => alive && setUpdates([]))
+      .finally(() => alive && setLoadingUpdates(false))
+    return () => {
+      alive = false
+    }
+  }, [project.id, selectedDate])
 
   // 贡献排行（按时间窗口）
   useEffect(() => {
@@ -582,7 +613,9 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
         {project.description && <Typography.Text type="secondary">{project.description}</Typography.Text>}
 
         {/* 用普通 flex 而不是 Space：Space 的子项是收缩宽度，百分比宽度在里面算不出来，
-            手机上搜索框（定宽 380）会撑破页面 */}
+            手机上搜索框（定宽 380）会撑破页面。
+            中栏切成当天更新日志时，这排工具栏和下面的面包屑都没有意义，一起收起来 */}
+        {!selectedDate && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <Input.Search
             placeholder="搜索资产名 / 描述 / 标签 / 文件名 / 上传者"
@@ -615,8 +648,10 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             打包下载
           </Button>
         </div>
+        )}
 
         {/* 面包屑路径，如 /模型/角色；点击导航，拖资产到某段 = 移入该文件夹 */}
+        {!selectedDate && (
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
           <span {...dropHandlers(0)} onClick={() => gotoFolder(0)} style={crumbStyle(0)}>
             <HomeOutlined style={{ marginRight: 4 }} />
@@ -631,8 +666,17 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             </span>
           ))}
         </div>
+        )}
 
-        {loading ? (
+        {selectedDate ? (
+          <UpdateLog
+            items={updates}
+            date={selectedDate}
+            onClearDate={() => setSelectedDate(null)}
+            clearText="返回资产列表"
+            loading={loadingUpdates}
+          />
+        ) : loading ? (
           <ArtSpin padding={60} />
         ) : childFolders.length === 0 && assets.length === 0 ? (
           <Empty
@@ -854,7 +898,14 @@ function ProjectDetailView({ project: initial }: { project: Project }) {
             years={activity?.years || []}
             today={activity?.today}
             value={year}
-            onChange={setYear}
+            onChange={(v) => {
+              // 换了年份/窗口后，原来选中的那天可能已经不在图里了
+              setYear(v)
+              setSelectedDate(null)
+            }}
+            selectedDate={selectedDate}
+            // 再点同一格 = 取消选中，中栏回到资产列表
+            onSelectDay={(d) => setSelectedDate((prev) => (prev === d ? null : d))}
           />
         </div>
       </div>

@@ -14,6 +14,8 @@ interface Props {
   /** 当前只看某一天时，显示该日期并提供「查看全部」 */
   date?: string | null
   onClearDate?: () => void
+  /** 右侧那个按钮的文案。项目页里它是退出当天视图、回资产列表，所以换个说法 */
+  clearText?: string
   loading?: boolean
   /** 展示项目名（个人主页跨项目时有用） */
   showProject?: boolean
@@ -23,6 +25,7 @@ export default function UpdateLog({
   items,
   date,
   onClearDate,
+  clearText = '查看全部',
   loading,
   showProject = false,
 }: Props) {
@@ -42,7 +45,7 @@ export default function UpdateLog({
         >
           <Typography.Text strong>{title}</Typography.Text>
           <Button type="link" size="small" onClick={onClearDate}>
-            查看全部
+            {clearText}
           </Button>
         </div>
       )}
